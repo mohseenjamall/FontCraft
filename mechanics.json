@@ -15,6 +15,8 @@
     {"name": "activated fonts registry key", "group": "sources", "value": "HKCU\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts", "source": "function 0x180001200 (fontsession.node registerFonts)"},
     {"name": "activated font value name", "group": "sources", "value": "<name> (FontBase)", "source": "function 0x180001200 wsprintfW \"%s (FontBase)\\n\""},
     {"name": "font change broadcast message", "group": "sources", "value": 29, "source": "function 0x180001200 PostMessageA(0xffff, 0x1d)"},
+    {"name": "FontCraft activation marker", "group": "activation", "value": "<stem> <fnv1a32 hex> (FontCraft)", "source": "src/activate.rs marker(), modelled on function 0x180001200"},
+    {"name": "activation API", "group": "activation", "value": "AddFontResourceW / RemoveFontResourceW + WM_FONTCHANGE", "source": "functions 0x180001200 and 0x1800017f0"},
     {"name": "list row height", "group": "layout", "value": "size*1.35+34", "unit": "px", "estimated": true}
   ]
 }

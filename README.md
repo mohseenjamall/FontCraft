@@ -14,6 +14,11 @@ Version 1.0.0
   writing system: Chinese, Japanese, Arabic, Hebrew, Devanagari, Thai and others.
 - **Family details.** Click a family to see every style and a waterfall at 72, 48, 24 and 14 px.
 - **Search and filter** by name or by where the fonts are stored.
+- **Turn fonts on and off.** Pick a family from a folder you added and click **Turn on**: every
+  Windows app (Word, Photoshop, Notepad…) can use it right away, without installing it, and it stays
+  on after you sign out or restart. **Turn off** removes it again. Fonts that are on show an **ON**
+  badge in the list. Built-in Windows fonts are always on; fonts FontBase turned on are shown as on
+  and left for FontBase to manage. If one file holds several families, they change together.
 - **Your folders are remembered.** Folders you add with **+ Add folder** come back the next time you
   open FontCraft.
 - **Fast.** Fonts are scanned on several threads at once, and only the fonts on screen are loaded.
@@ -43,5 +48,4 @@ rules and numbers it follows and where each one came from.
 
 ## Not in version 1
 
-Turning fonts on and off, collections and tags, the character map, OpenType feature controls and
-variable-font sliders.
+Collections and tags, the character map, OpenType feature controls and variable-font sliders.

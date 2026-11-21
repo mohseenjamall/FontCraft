@@ -20,7 +20,21 @@ It exports two functions, `registerFonts` and `unregisterFonts` (names at 0x1800
 
 Used in the rebuild: the list reads that registry key and shows every value containing
 " (FontBase)" as the source **Activated by FontBase**, so fonts FontBase turned on from other
-folders appear too (`scan::fontbase_activated`). Turning fonts on/off itself is not built.
+folders appear too (`scan::fontbase_activated`).
+
+### FontCraft's own activation (`src/activate.rs`)
+
+Same three steps as FontBase's add-on, with its own marker so the two apps can share the key:
+
+| Rule | Value | Source |
+|---|---|---|
+| Turn on | file must exist, then `AddFontResourceW(path)`, then write the marker; undo the load if the write fails | follows 0x180001200 |
+| Marker | value `"<file stem> <8-hex FNV-1a 32 of the lowercased path> (FontCraft)"` = REG_SZ full path, in the same `HKCU\…\Fonts` key | FontCraft decision (hash keeps same-named files in two folders apart) |
+| Turn off | `RemoveFontResourceW(path)` (a 0 return is fine: the file may be gone), then delete the marker | follows 0x1800017f0 |
+| Broadcast | `PostMessageW(HWND_BROADCAST, WM_FONTCHANGE, 0, 0)` once per batch that changed something | 0x180001200 / 0x1800017f0 |
+| What counts as on | every file of the family has a `(FontCraft)` or `(FontBase)` value whose file still exists | FontCraft decision |
+| Who may toggle | only families whose files come from folders the person added; FontCraft never edits or deletes `(FontBase)` values | FontCraft decision |
+| Unit | per file: a `.ttc` holding several families turns them all on or off together | Windows loads whole files |
 
 FontBase.exe (214 MB) is the stock Electron/Chromium shell. Searching its strings for font
 settings finds only Chromium's web-preferences reader (`defaultFontSize`, `minimumFontSize`,
@@ -47,6 +61,5 @@ Estimated (looked for, not found as plain values; strings in `app.js` are obfusc
   Latin sentence from talker.js is used instead.
 - List row height: font size × 1.35 + 34 px.
 
-Left out of this version (the person asked for the main feature only): activating/deactivating
-fonts, collections and tags, Google Fonts, glyph map, OpenType feature toggles, variable-font
+Left out of this version: collections and tags, Google Fonts, glyph map, OpenType feature toggles, variable-font
 sliders, cloud sync.

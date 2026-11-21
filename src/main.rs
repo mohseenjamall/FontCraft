@@ -1,4 +1,5 @@
 ﻿#![cfg_attr(not(test), windows_subsystem = "windows")]
+mod activate;
 mod app;
 mod fonts;
 mod samples;
@@ -60,7 +61,10 @@ fn save_png(img: &egui::ColorImage, path: &std::path::Path) -> Result<(), Box<dy
 
 fn main() -> eframe::Result {
     let args: Vec<String> = std::env::args().collect();
-    let shot_path = args.iter().position(|a| a == "--screenshot").and_then(|i| args.get(i + 1)).map(PathBuf::from);
+    let arg = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1)).cloned();
+    let shot_path = arg("--screenshot").map(PathBuf::from);
+    // Opens one family at start, list filtered to it (used with --screenshot to check its panel and row).
+    let select = arg("--select");
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("FontCraft")
@@ -80,7 +84,11 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| {
             let shot = shot_path.map(|path| Shot { path, requested: false, image: Default::default() });
-            Ok(Box::new(Runner { app: app::FontApp::new(&cc.egui_ctx), shot }))
+            let mut app = app::FontApp::new(&cc.egui_ctx);
+            if let Some(name) = select {
+                app.open_family(name);
+            }
+            Ok(Box::new(Runner { app, shot }))
         }),
     )
 }

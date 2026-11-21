@@ -1,10 +1,12 @@
 //! The window: dark header with preview text and size, dark sidebar with font sources,
 //! light list of font families previewed in their own typeface, and a detail panel.
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use eframe::egui::{self, Color32, FontId, RichText};
 
+use crate::activate;
 use crate::fonts::FontLoader;
 use crate::scan::{self, Face};
 
@@ -34,6 +36,19 @@ impl Family {
             .min_by_key(|f| (f.italic, (f.weight as i32 - 400).abs()))
             .expect("a family always has a face")
     }
+
+    /// The distinct font files behind this family, sorted. A .ttc can hold other families too.
+    fn files(&self) -> Vec<PathBuf> {
+        let mut files: Vec<PathBuf> = self.faces.iter().map(|f| f.path.clone()).collect();
+        files.sort();
+        files.dedup();
+        files
+    }
+}
+
+/// On for every app only when every one of its files is on.
+fn all_active(active: &HashSet<PathBuf>, fam: &Family) -> bool {
+    fam.faces.iter().all(|f| active.contains(&f.path))
 }
 
 pub struct FontApp {
@@ -51,6 +66,12 @@ pub struct FontApp {
     source: Option<usize>,
     selected: Option<String>,
     selected_face: usize,
+    /// Files turned on through the registry (by FontCraft or FontBase) that still exist.
+    active: HashSet<PathBuf>,
+    /// Files FontBase turned on: shown as on, but only FontBase may turn them off.
+    fontbase_files: HashSet<PathBuf>,
+    /// Last activation error, shown under the toggle until clicked away.
+    notice: Option<String>,
     pub frames: u32,
 }
 
@@ -64,7 +85,8 @@ impl FontApp {
         sources.extend(crate::store::load_folders().into_iter().map(|p| (folder_label(&p), p)));
         let mut jobs: Vec<(usize, PathBuf)> =
             sources.iter().cloned().enumerate().filter(|(i, _)| *i != activated).map(|(i, (_, p))| (i, p)).collect();
-        jobs.extend(scan::fontbase_activated().into_iter().map(|p| (activated, p)));
+        let fontbase_files: HashSet<PathBuf> = scan::fontbase_activated().into_iter().collect();
+        jobs.extend(fontbase_files.iter().cloned().map(|p| (activated, p)));
         let mut scan = Scans::new();
         scan.start(jobs);
         Self {
@@ -81,8 +103,43 @@ impl FontApp {
             source: None,
             selected: None,
             selected_face: 0,
+            active: activate::read_active(activate::FONTS_KEY),
+            fontbase_files,
+            notice: None,
             frames: 0,
         }
+    }
+
+    /// Shows one family: its details panel open and the list searched down to it.
+    pub fn open_family(&mut self, name: String) {
+        self.search = name.clone();
+        self.selected = Some(name);
+    }
+
+    /// Only fonts from folders the person added; built-in ones are already installed.
+    fn can_toggle(&self, fam: &Family) -> bool {
+        fam.faces.iter().all(|f| f.source >= self.fixed_sources)
+    }
+
+    fn toggle(&mut self, name: &str) {
+        self.toggle_in(name, activate::FONTS_KEY);
+    }
+
+    /// Turns the family's files on (or off when all are on) under `key`, then re-reads what's on.
+    fn toggle_in(&mut self, name: &str, key: &str) {
+        let Some(fam) = self.families.iter().find(|f| f.name == name) else { return };
+        if !self.can_toggle(fam) {
+            return;
+        }
+        let files = fam.files();
+        let result = if all_active(&self.active, fam) {
+            activate::deactivate_in(key, &files)
+        } else {
+            activate::activate_in(key, &files)
+        };
+        // Re-read even on error: a batch can fail after some files were already turned on.
+        self.active = activate::read_active(key);
+        self.notice = result.err();
     }
 
     /// True once every font is listed and every visible preview has its typeface.
@@ -299,6 +356,7 @@ impl FontApp {
         let face = fam.main_face().clone();
         let selected = self.selected.as_deref() == Some(fam.name.as_str());
         let (name, styles) = (fam.name.clone(), fam.faces.len());
+        let on = all_active(&self.active, fam);
         let family = self.loader.family(&face);
         let sample = self.sample(&face);
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), row_h), egui::Sense::click());
@@ -308,6 +366,11 @@ impl FontApp {
         }
         let meta = format!("{name}   ·   {styles} style{}", if styles == 1 { "" } else { "s" });
         painter.text(rect.left_top() + egui::vec2(8.0, 8.0), egui::Align2::LEFT_TOP, meta, FontId::proportional(12.0), Color32::from_gray(0x80));
+        if on {
+            let pill = egui::Rect::from_min_size(rect.right_top() + egui::vec2(-44.0, 6.0), egui::vec2(34.0, 16.0));
+            painter.rect_filled(pill, 8.0, ACTION);
+            painter.text(pill.center(), egui::Align2::CENTER_CENTER, "ON", FontId::proportional(10.0), Color32::WHITE);
+        }
         let pos = rect.left_top() + egui::vec2(8.0, 28.0);
         match family {
             Some(f) => {
@@ -327,6 +390,18 @@ impl FontApp {
         let Some(name) = self.selected.clone() else { return };
         let Some(fam) = self.families.iter().find(|f| f.name == name) else { return };
         let faces = fam.faces.clone();
+        let files = fam.files();
+        let on = all_active(&self.active, fam);
+        let by_fontbase = files.iter().any(|f| self.fontbase_files.contains(f));
+        let can = self.can_toggle(fam) && !by_fontbase;
+        let built_in = !self.can_toggle(fam) && !by_fontbase;
+        let shares: Vec<String> = self
+            .families
+            .iter()
+            .filter(|f| f.name != name && f.faces.iter().any(|x| files.contains(&x.path)))
+            .map(|f| f.name.clone())
+            .collect();
+        let mut clicked = false;
         egui::Panel::right("details")
             .default_size(420.0)
             .resizable(true)
@@ -336,12 +411,45 @@ impl FontApp {
                 ui.horizontal(|ui| {
                     ui.heading(&name);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("✕").clicked() {
+                        if ui.button("×").on_hover_text("Close").clicked() {
                             self.selected = None;
                         }
                     });
                 });
                 ui.label(RichText::new(faces[0].path.display().to_string()).size(11.0).color(Color32::GRAY));
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    let (text, fill, color) = match (built_in, on) {
+                        _ if by_fontbase => ("Managed by FontBase", Color32::from_gray(0xEE), TEXT_MAIN),
+                        (true, _) => ("Installed", Color32::from_gray(0xEE), TEXT_MAIN),
+                        (false, true) => ("Turn off", Color32::from_gray(0xEE), TEXT_MAIN),
+                        (false, false) => ("Turn on", ACTION, Color32::WHITE),
+                    };
+                    let resp = ui.add_enabled(can, egui::Button::new(RichText::new(text).color(color)).fill(fill));
+                    let resp = if by_fontbase {
+                        resp.on_disabled_hover_text("Turned on by FontBase")
+                    } else {
+                        resp.on_disabled_hover_text("Built-in fonts are always on")
+                    };
+                    clicked = resp.clicked();
+                    if on {
+                        ui.label(RichText::new("On for all apps").size(12.0).color(ACTION));
+                    }
+                });
+                if !shares.is_empty() && can {
+                    ui.label(
+                        RichText::new(format!("This file also holds: {} (they change together)", shares.join(", ")))
+                            .size(11.0)
+                            .color(Color32::GRAY),
+                    );
+                }
+                if let Some(n) = &self.notice {
+                    let notice = egui::Label::new(RichText::new(n).size(12.0).color(Color32::from_rgb(0xD0, 0x00, 0x48)))
+                        .sense(egui::Sense::click());
+                    if ui.add(notice).on_hover_text("Click to dismiss").clicked() {
+                        self.notice = None;
+                    }
+                }
                 ui.separator();
                 egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
                     for (k, face) in faces.iter().enumerate() {
@@ -364,6 +472,9 @@ impl FontApp {
                     }
                 });
             });
+        if clicked {
+            self.toggle(&name);
+        }
     }
 }
 
@@ -373,6 +484,93 @@ mod tests {
 
     fn face(family: &str, style: &str, weight: u16, italic: bool) -> Face {
         Face { path: PathBuf::from(format!("{family}{style}.ttf")), index: 0, family: family.into(), style: style.into(), weight, italic, script: 0, source: 0 }
+    }
+
+    fn sourced(path: &std::path::Path, family: &str, source: usize) -> Face {
+        Face { path: path.to_path_buf(), source, ..face(family, "Regular", 400, false) }
+    }
+
+    impl FontApp {
+        /// An app with no scan running, `fixed_sources` built-in sources and these faces.
+        fn for_test(fixed_sources: usize, faces: Vec<Face>) -> Self {
+            Self {
+                sources: Vec::new(),
+                fixed_sources,
+                scan: Scans::new(),
+                scan_done: true,
+                families: group(&faces),
+                faces,
+                loader: FontLoader::new(),
+                text: String::new(),
+                size: SIZE_DEFAULT,
+                search: String::new(),
+                source: None,
+                selected: None,
+                selected_face: 0,
+                active: HashSet::new(),
+                fontbase_files: HashSet::new(),
+                notice: None,
+                frames: 0,
+            }
+        }
+    }
+
+    #[test]
+    fn family_files_are_distinct_and_sorted() {
+        let fam = Family {
+            name: "X".into(),
+            faces: vec![sourced("b.ttc".as_ref(), "X", 3), sourced("a.ttf".as_ref(), "X", 3), sourced("b.ttc".as_ref(), "X", 3)],
+        };
+        assert_eq!(fam.files(), vec![PathBuf::from("a.ttf"), PathBuf::from("b.ttc")]);
+    }
+
+    #[test]
+    fn can_toggle_false_for_built_in_sources() {
+        let app = FontApp::for_test(3, vec![sourced("a.ttf".as_ref(), "X", 0)]);
+        assert!(!app.can_toggle(&app.families[0]));
+    }
+
+    #[test]
+    fn can_toggle_true_for_added_folder() {
+        let app = FontApp::for_test(3, vec![sourced("a.ttf".as_ref(), "X", 3)]);
+        assert!(app.can_toggle(&app.families[0]));
+    }
+
+    #[test]
+    fn is_active_requires_all_files_active() {
+        let fam = Family { name: "X".into(), faces: vec![sourced("a.ttf".as_ref(), "X", 3), sourced("b.ttf".as_ref(), "X", 3)] };
+        let mut active = HashSet::from([PathBuf::from("a.ttf")]);
+        assert!(!all_active(&active, &fam));
+        active.insert(PathBuf::from("b.ttf"));
+        assert!(all_active(&active, &fam));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn toggle_turns_family_on_then_off() {
+        let s = crate::activate::tests::Scratch::new("apptoggle");
+        let f = s.font("toggle.ttf");
+        let mut app = FontApp::for_test(3, vec![sourced(&f, "X", 3)]);
+        app.toggle_in("X", &s.key);
+        assert_eq!(app.notice, None);
+        assert!(all_active(&app.active, &app.families[0]));
+        app.toggle_in("X", &s.key);
+        assert!(!all_active(&app.active, &app.families[0]));
+        // A built-in family is never touched.
+        let mut built_in = FontApp::for_test(3, vec![sourced(&f, "Y", 0)]);
+        built_in.toggle_in("Y", &s.key);
+        assert!(built_in.active.is_empty());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn toggle_missing_file_shows_notice_and_keeps_state() {
+        let s = crate::activate::tests::Scratch::new("appmissing");
+        let gone = s.dir.join("gone.ttf");
+        let mut app = FontApp::for_test(3, vec![sourced(&gone, "X", 3)]);
+        app.toggle_in("X", &s.key);
+        assert!(app.notice.as_deref().is_some_and(|n| n.contains("gone.ttf")));
+        assert!(app.active.is_empty());
     }
 
     #[test]
