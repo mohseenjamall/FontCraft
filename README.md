@@ -17,7 +17,9 @@ Version 1.0.0
 - **Your folders are remembered.** Folders you add with **+ Add folder** come back the next time you
   open FontCraft.
 - **Fast.** Fonts are scanned on several threads at once, and only the fonts on screen are loaded.
-  About 500 font styles are listed and drawn in around 2 seconds.
+  About 500 font styles are listed and drawn in around 2 seconds. Compared with FontBase, it is
+  ready about 4× sooner and uses about 7× less memory. See [EVALUATION.md](EVALUATION.md) for the
+  full speed test (re-run it with `bench.ps1`).
 
 ## Build and run
 

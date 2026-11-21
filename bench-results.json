@@ -1,0 +1,108 @@
+﻿{
+    "runs":  [
+                 {
+                     "WindowSeconds":  null,
+                     "IdleSeconds":  4.28,
+                     "ShowFromTraySeconds":  0.24,
+                     "Processes":  5,
+                     "WorkingSetMB":  784,
+                     "PrivateMB":  701,
+                     "CpuSeconds":  9.95,
+                     "Threads":  185,
+                     "Label":  "FontBase",
+                     "Run":  1
+                 },
+                 {
+                     "WindowSeconds":  null,
+                     "IdleSeconds":  7.26,
+                     "ShowFromTraySeconds":  0.26,
+                     "Processes":  5,
+                     "WorkingSetMB":  765,
+                     "PrivateMB":  758,
+                     "CpuSeconds":  5.62,
+                     "Threads":  182,
+                     "Label":  "FontBase",
+                     "Run":  2
+                 },
+                 {
+                     "WindowSeconds":  null,
+                     "IdleSeconds":  6.21,
+                     "ShowFromTraySeconds":  0.26,
+                     "Processes":  5,
+                     "WorkingSetMB":  865,
+                     "PrivateMB":  765,
+                     "CpuSeconds":  18.11,
+                     "Threads":  180,
+                     "Label":  "FontBase",
+                     "Run":  3
+                 },
+                 {
+                     "WindowSeconds":  0.06,
+                     "IdleSeconds":  1.46,
+                     "ShowFromTraySeconds":  null,
+                     "Processes":  1,
+                     "WorkingSetMB":  104,
+                     "PrivateMB":  110,
+                     "CpuSeconds":  0.81,
+                     "Threads":  18,
+                     "Label":  "FontCraft",
+                     "Run":  1
+                 },
+                 {
+                     "WindowSeconds":  0.37,
+                     "IdleSeconds":  2.32,
+                     "ShowFromTraySeconds":  null,
+                     "Processes":  1,
+                     "WorkingSetMB":  104,
+                     "PrivateMB":  112,
+                     "CpuSeconds":  0.86,
+                     "Threads":  18,
+                     "Label":  "FontCraft",
+                     "Run":  2
+                 },
+                 {
+                     "WindowSeconds":  0.28,
+                     "IdleSeconds":  0.95,
+                     "ShowFromTraySeconds":  null,
+                     "Processes":  1,
+                     "WorkingSetMB":  101,
+                     "PrivateMB":  107,
+                     "CpuSeconds":  0.77,
+                     "Threads":  18,
+                     "Label":  "FontCraft",
+                     "Run":  3
+                 }
+             ],
+    "median":  [
+                   {
+                       "Label":  "FontBase",
+                       "WindowSeconds":  null,
+                       "IdleSeconds":  6.21,
+                       "ShowFromTraySeconds":  0.26,
+                       "Processes":  5,
+                       "WorkingSetMB":  784,
+                       "PrivateMB":  758,
+                       "CpuSeconds":  9.95,
+                       "Threads":  182,
+                       "DiskMB":  438.3
+                   },
+                   {
+                       "Label":  "FontCraft",
+                       "WindowSeconds":  0.28,
+                       "IdleSeconds":  1.46,
+                       "ShowFromTraySeconds":  null,
+                       "Processes":  1,
+                       "WorkingSetMB":  104,
+                       "PrivateMB":  110,
+                       "CpuSeconds":  0.81,
+                       "Threads":  18,
+                       "DiskMB":  6.3
+                   }
+               ],
+    "fontcraft_ready_seconds":  [
+                                    1.93,
+                                    1.92,
+                                    1.92
+                                ],
+    "settle_seconds":  20
+}
