@@ -2,7 +2,6 @@
 mod activate;
 mod app;
 mod fonts;
-mod rtl;
 mod samples;
 mod scan;
 mod store;

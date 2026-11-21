@@ -16,3 +16,8 @@ opt-level = 3
 [target."cfg(windows)".dependencies]
 winreg = "0.56.0"
 windows-sys = { version = "0.61", features = ["Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
+
+# Arabic/Hebrew layout and cursor: egui pull request emilk/egui#8577 (bidi runs), applied to epaint 0.37.0.
+# Drop this once that change ships in an egui release.
+[patch.crates-io]
+epaint = { path = "vendor/epaint" }
