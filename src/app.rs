@@ -78,6 +78,7 @@ pub struct FontApp {
 impl FontApp {
     pub fn new(ctx: &egui::Context) -> Self {
         ctx.set_visuals(egui::Visuals::light());
+        crate::fonts::add_system_fallback(ctx);
         let mut sources = scan::system_folders();
         let activated = sources.len();
         // Fonts FontBase activated from other folders (scanned file by file).

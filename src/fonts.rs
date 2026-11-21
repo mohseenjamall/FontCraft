@@ -74,3 +74,13 @@ impl FontLoader {
         self.requested.len() > self.ready.len()
     }
 }
+
+/// egui's built-in fonts have no Arabic or Hebrew; borrow them from Windows for any text that needs them.
+pub fn add_system_fallback(ctx: &egui::Context) {
+    let Some(win) = std::env::var_os("WINDIR") else { return };
+    for name in ["segoeui.ttf", "tahoma.ttf"] {
+        let Ok(bytes) = std::fs::read(PathBuf::from(&win).join("Fonts").join(name)) else { continue };
+        let family = InsertFontFamily { family: FontFamily::Proportional, priority: FontPriority::Lowest };
+        ctx.add_font(FontInsert::new(name, FontData::from_blob(Arc::new(bytes), 0), vec![family]));
+    }
+}
