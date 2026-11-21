@@ -704,7 +704,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn unix_system_font_cannot_toggle() {
-        let app = FontApp::for_test(3, vec![sourced("/usr/share/fonts/a.ttf".as_ref(), "X", 0)]);
+        let system = crate::platform::system_font_dirs()[0].join("a.ttf");
+        let app = FontApp::for_test(3, vec![sourced(&system, "X", 0)]);
         assert!(!app.can_toggle(&app.families[0]));
     }
 
