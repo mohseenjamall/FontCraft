@@ -168,6 +168,8 @@ mod tests {
     fn live_update_check() {
         let answer = fetch();
         let found = check(env!("CARGO_PKG_VERSION"));
-        println!("live update check done: GitHub answered {answer:?}, update = {found:?}");
+        // What a copy of the first release would see.
+        let for_old = check("1.0.0");
+        println!("live update check done: GitHub answered {answer:?}, update = {found:?}, for 1.0.0 = {for_old:?}");
     }
 }
