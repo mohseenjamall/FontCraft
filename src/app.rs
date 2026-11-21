@@ -143,6 +143,10 @@ impl FontApp {
         self.notice = result.err();
     }
 
+    pub fn set_text(&mut self, text: String) {
+        self.text = text;
+    }
+
     /// True once every font is listed and every visible preview has its typeface.
     pub fn settled(&self) -> bool {
         self.scan_done && !self.loader.waiting()
@@ -198,6 +202,22 @@ fn dark_visuals() -> egui::Visuals {
     v.selection.bg_fill = ACTION;
     v.selection.stroke.color = Color32::WHITE;
     v
+}
+
+/// How to draw a sample: in the face itself, or dimmed in the fallback font when the face lacks a letter.
+struct Drawn {
+    font: FontId,
+    color: Color32,
+    has_all: bool,
+}
+
+fn pick_font(ctx: &egui::Context, family: egui::FontFamily, sample: &str, size: f32, ink: Color32) -> Drawn {
+    let own = FontId::new(size, family);
+    if ctx.fonts_mut(|f| f.has_glyphs(&own, sample)) {
+        Drawn { font: own, color: ink, has_all: true }
+    } else {
+        Drawn { font: FontId::proportional(size), color: Color32::from_gray(0xB8), has_all: false }
+    }
 }
 
 fn folder_label(p: &std::path::Path) -> String {
@@ -278,11 +298,8 @@ impl FontApp {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     *ui.visuals_mut() = dark_visuals();
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.text)
-                            .hint_text("Type something to preview…")
-                            .desired_width(ui.available_width() * 0.5),
-                    );
+                    let width = ui.available_width() * 0.5;
+                    crate::rtl::edit(ui, &mut self.text, "Type something to preview…", width);
                     ui.add_space(12.0);
                     ui.label("Size");
                     ui.add(
@@ -291,7 +308,7 @@ impl FontApp {
                             .suffix(" px"),
                     );
                     ui.add_space(12.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("Search fonts").desired_width(180.0));
+                    crate::rtl::edit(ui, &mut self.search, "Search fonts", 180.0);
                 });
             });
     }
@@ -365,7 +382,12 @@ impl FontApp {
         if selected || resp.hovered() {
             painter.rect_filled(rect, 6.0, if selected { Color32::from_rgb(0xEC, 0xE6, 0xFD) } else { Color32::from_gray(0xF0) });
         }
-        let meta = format!("{name}   ·   {styles} style{}", if styles == 1 { "" } else { "s" });
+        let drawn = family.map(|f| pick_font(ui.ctx(), f, &sample, self.size, TEXT_MAIN));
+        let lacks = drawn.as_ref().is_some_and(|d| !d.has_all);
+        let mut meta = format!("{name}   ·   {styles} style{}", if styles == 1 { "" } else { "s" });
+        if lacks {
+            meta.push_str("   ·   no glyphs for this text");
+        }
         painter.text(rect.left_top() + egui::vec2(8.0, 8.0), egui::Align2::LEFT_TOP, meta, FontId::proportional(12.0), Color32::from_gray(0x80));
         if on {
             let pill = egui::Rect::from_min_size(rect.right_top() + egui::vec2(-44.0, 6.0), egui::vec2(34.0, 16.0));
@@ -373,9 +395,9 @@ impl FontApp {
             painter.text(pill.center(), egui::Align2::CENTER_CENTER, "ON", FontId::proportional(10.0), Color32::WHITE);
         }
         let pos = rect.left_top() + egui::vec2(8.0, 28.0);
-        match family {
-            Some(f) => {
-                painter.text(pos, egui::Align2::LEFT_TOP, sample, FontId::new(self.size, f), TEXT_MAIN);
+        match drawn {
+            Some(d) => {
+                painter.text(pos, egui::Align2::LEFT_TOP, sample, d.font, d.color);
             }
             None => {
                 painter.text(pos, egui::Align2::LEFT_TOP, sample, FontId::proportional(self.size), Color32::from_gray(0xD0));
@@ -467,8 +489,9 @@ impl FontApp {
                     let sample = self.sample(face);
                     if let Some(f) = self.loader.family(face) {
                         for size in WATERFALL {
+                            let d = pick_font(ui.ctx(), f.clone(), &sample, size, TEXT_MAIN);
                             ui.label(RichText::new(format!("{size} px")).size(11.0).color(Color32::GRAY));
-                            ui.add(egui::Label::new(RichText::new(&sample).font(FontId::new(size, f.clone()))).wrap());
+                            ui.add(egui::Label::new(RichText::new(&sample).font(d.font).color(d.color)).wrap());
                         }
                     }
                 });

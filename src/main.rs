@@ -1,7 +1,8 @@
-﻿#![cfg_attr(not(test), windows_subsystem = "windows")]
+#![cfg_attr(not(test), windows_subsystem = "windows")]
 mod activate;
 mod app;
 mod fonts;
+mod rtl;
 mod samples;
 mod scan;
 mod store;
@@ -65,6 +66,8 @@ fn main() -> eframe::Result {
     let shot_path = arg("--screenshot").map(PathBuf::from);
     // Opens one family at start, list filtered to it (used with --screenshot to check its panel and row).
     let select = arg("--select");
+    // Starts with this preview text (used with --screenshot to check how a sample draws).
+    let text = arg("--text");
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("FontCraft")
@@ -85,6 +88,9 @@ fn main() -> eframe::Result {
         Box::new(move |cc| {
             let shot = shot_path.map(|path| Shot { path, requested: false, image: Default::default() });
             let mut app = app::FontApp::new(&cc.egui_ctx);
+            if let Some(text) = text {
+                app.set_text(text);
+            }
             if let Some(name) = select {
                 app.open_family(name);
             }
