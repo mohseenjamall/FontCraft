@@ -49,7 +49,7 @@ cargo build --release
 
 Run it:
 
-- **Windows:** `targeteleaseontcraft.exe`
+- **Windows:** `target\release\fontcraft.exe`
 - **macOS:** `target/release/fontcraft`. Release builds are unsigned: the first time, right-click
   the app and choose **Open** once.
 - **Linux:** `target/release/fontcraft`
