@@ -4,20 +4,50 @@
 //! FontCraft writes its own " (FontCraft)" values. Turning off a user-installed or FontBase font
 //! saves its values in the saved list first (`disabled.rs`) so turning it on restores them exactly.
 //! System fonts (%WINDIR%\Fonts, HKLM) are never touched; no font file is ever deleted.
-#[cfg(not(windows))]
-use std::collections::HashSet;
-use std::path::Path;
-#[cfg(any(test, not(windows)))]
-use std::path::PathBuf;
+//! On macOS and Linux the same functions come from `activate_unix.rs` (links and fontconfig rules).
+use std::path::{Path, PathBuf};
 
 pub const FONTS_KEY: &str = r"Software\Microsoft\Windows NT\CurrentVersion\Fonts";
+#[cfg(windows)]
 const OWN_SUFFIX: &str = " (FontCraft)";
 
-/// Registry value name for a file: "<stem> <fnv1a-32 of the lowercased path> (FontCraft)".
-/// The hash keeps two files with the same name in different folders apart.
-/// Path as a set key: Windows treats paths without regard to case and `/` the same as `\`.
-pub fn norm(path: &Path) -> std::path::PathBuf {
-    path.to_string_lossy().to_lowercase().replace('/', "\\").into()
+/// Where turned-on fonts are recorded: the registry key on Windows, the links folder elsewhere.
+#[allow(dead_code)] // app.rs moves from FONTS_KEY to this in the next change
+pub fn key() -> String {
+    if cfg!(windows) {
+        FONTS_KEY.into()
+    } else {
+        crate::platform::user_fonts_dir().map(|d| d.join("FontCraft").to_string_lossy().into_owned()).unwrap_or_default()
+    }
+}
+
+/// Path as a set key: Windows treats paths without regard to case and `/` the same as `\`;
+/// macOS and Linux paths are compared as they are.
+pub fn norm(path: &Path) -> PathBuf {
+    if cfg!(windows) { path.to_string_lossy().to_lowercase().replace('/', "\\").into() } else { path.to_path_buf() }
+}
+
+/// Why this file can't be turned on or off, or `None` when it can.
+#[allow(dead_code)] // app.rs uses this in the next change
+pub fn lock_reason(path: &Path) -> Option<&'static str> {
+    #[cfg(windows)]
+    return is_system_font(path).then_some("Installed for every user in Windows\\Fonts; FontCraft never changes these");
+    #[cfg(not(windows))]
+    {
+        let user_fonts = crate::platform::user_fonts_dir().unwrap_or_default();
+        crate::activate_unix::lock_reason_in(path, &user_fonts, Path::new(&key()))
+    }
+}
+
+/// Link file name for a font: "<stem>-<fnv1a-32 of the path bytes>.<ext>"; the hash keeps two
+/// files with the same name in different folders apart.
+pub fn link_name(path: &Path) -> String {
+    let hash = path.as_os_str().as_encoded_bytes().iter().fold(0x811c_9dc5u32, |h, &b| (h ^ b as u32).wrapping_mul(0x0100_0193));
+    let stem = path.file_stem().map_or_else(String::new, |s| s.to_string_lossy().into_owned());
+    match path.extension() {
+        Some(ext) => format!("{stem}-{hash:08x}.{}", ext.to_string_lossy()),
+        None => format!("{stem}-{hash:08x}"),
+    }
 }
 
 /// A file directly in %WINDIR%\Fonts: installed for every user through HKLM, so turning it off
@@ -28,10 +58,14 @@ pub fn is_system_font(path: &Path) -> bool {
     path.parent().is_some_and(|p| norm(p) == fonts)
 }
 
+#[cfg(windows)]
 fn system_error(path: &Path) -> String {
     format!("{}: System font: needs administrator", path.display())
 }
 
+/// Registry value name for a file: "<stem> <fnv1a-32 of the lowercased path> (FontCraft)".
+/// The hash keeps two files with the same name in different folders apart.
+#[cfg(windows)]
 pub fn marker(path: &Path) -> String {
     let lower = path.to_string_lossy().to_lowercase();
     let hash = lower.bytes().fold(0x811c_9dc5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193));
@@ -249,26 +283,28 @@ mod imp {
 #[cfg(windows)]
 pub use imp::{read_active, read_disabled, turn_off_in, turn_on_in};
 
-#[cfg(not(windows))]
-pub fn read_active(_key: &str) -> HashSet<PathBuf> {
-    HashSet::new()
-}
+#[cfg(unix)]
+pub use crate::activate_unix::{read_active, read_disabled, turn_off_in, turn_on_in};
 
-#[cfg(not(windows))]
-pub fn read_disabled(_store: &Path) -> HashSet<PathBuf> {
-    HashSet::new()
-}
+#[cfg(test)]
+mod portable_tests {
+    use super::*;
 
-#[cfg(not(windows))]
-pub fn turn_off_in(_key: &str, _store: &Path, _paths: &[PathBuf]) -> Result<usize, String> {
-    Err("Turning fonts on and off works on Windows only".into())
-}
+    #[test]
+    fn link_name_differs_for_same_file_in_two_folders() {
+        let a = link_name(Path::new("/a/Foo.ttf"));
+        assert_ne!(a, link_name(Path::new("/b/Foo.ttf")));
+        let hex = a.strip_prefix("Foo-").and_then(|r| r.strip_suffix(".ttf")).unwrap();
+        assert!(hex.len() == 8 && hex.chars().all(|c| c.is_ascii_hexdigit()), "{a}");
+    }
 
-#[cfg(not(windows))]
-pub fn turn_on_in(_key: &str, _store: &Path, _paths: &[PathBuf]) -> Result<usize, String> {
-    Err("Turning fonts on and off works on Windows only".into())
+    #[test]
+    fn lock_reason_system_font_is_some() {
+        // /usr/share/fonts on Linux, /System/Library/Fonts on macOS, %WINDIR%\Fonts on Windows.
+        let dir = crate::platform::system_font_dirs().into_iter().next().unwrap();
+        assert!(lock_reason(&dir.join("x.ttf")).is_some());
+    }
 }
-
 
 #[cfg(test)]
 #[cfg(windows)]

@@ -13,7 +13,7 @@ fn env_path(name: &str) -> Option<PathBuf> {
     std::env::var_os(name).filter(|v| !v.is_empty()).map(PathBuf::from)
 }
 
-fn xdg(var: &str, home_rel: &str) -> Option<PathBuf> {
+pub fn xdg(var: &str, home_rel: &str) -> Option<PathBuf> {
     linux_dir(env_path("HOME").as_deref(), env_path(var).as_deref(), home_rel)
 }
 

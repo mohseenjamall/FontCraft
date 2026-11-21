@@ -9,10 +9,16 @@ fn file() -> Option<PathBuf> {
     dir().map(|d| d.join("folders.txt"))
 }
 
-/// Where turned-off fonts' registry values are kept (see `disabled.rs`).
+/// Where turned-off fonts are recorded: on Windows their saved registry values (see `disabled.rs`),
+/// on Linux FontCraft's fontconfig reject file (see `activate_unix.rs`); unused on macOS.
 pub fn disabled_list() -> PathBuf {
+    let path = if cfg!(any(windows, target_os = "macos")) {
+        dir().map(|d| d.join("disabled.tsv"))
+    } else {
+        crate::platform::xdg("XDG_CONFIG_HOME", ".config").map(|d| d.join("fontconfig/conf.d/99-fontcraft.conf"))
+    };
     // An empty path makes saving fail with a clear error instead of writing somewhere unexpected.
-    dir().map(|d| d.join("disabled.tsv")).unwrap_or_default()
+    path.unwrap_or_default()
 }
 
 pub fn load_folders() -> Vec<PathBuf> {

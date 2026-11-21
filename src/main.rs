@@ -1,5 +1,7 @@
 #![cfg_attr(not(test), windows_subsystem = "windows")]
 mod activate;
+// Built on every OS so its file logic is tested on Windows too; only used on macOS and Linux.
+mod activate_unix;
 mod app;
 mod disabled;
 mod fonts;
