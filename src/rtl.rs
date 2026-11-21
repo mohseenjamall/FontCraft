@@ -1,9 +1,14 @@
 //! egui shapes Arabic and Hebrew correctly but draws the text cursor as if the line ran left to right,
 //! so new letters appeared on the wrong side of it. This draws the cursor where RTL text really grows.
-use eframe::egui::{self, Align2, Stroke, TextEdit, Ui, pos2};
+use eframe::egui::{self, Align2, FontFamily, Stroke, TextEdit, TextStyle, Ui, pos2};
 
 fn is_rtl_char(c: char) -> bool {
     matches!(c, '\u{0590}'..='\u{08FF}' | '\u{FB1D}'..='\u{FDFF}' | '\u{FE70}'..='\u{FEFF}')
+}
+
+/// The family to draw `s` in: the Arabic/Hebrew one when it has any such letter, the normal one otherwise.
+pub fn family(s: &str) -> FontFamily {
+    if s.chars().any(is_rtl_char) { crate::fonts::rtl_family() } else { FontFamily::Proportional }
 }
 
 /// True when every letter is Arabic or Hebrew (spaces, digits and punctuation don't count).
@@ -25,7 +30,10 @@ fn caret_x(glyphs: &[(f32, f32)], index: usize) -> f32 {
 /// A one-line text box; right-aligned with a correct cursor while the person types Arabic or Hebrew.
 pub fn edit(ui: &mut Ui, text: &mut String, hint: &str, width: f32) -> egui::Response {
     let rtl = is_rtl(text);
-    let field = TextEdit::singleline(text).hint_text(hint).desired_width(width);
+    // Same id in both branches: otherwise the box loses focus the moment the first Arabic letter flips it.
+    let mut font = TextStyle::Body.resolve(ui.style());
+    font.family = family(text);
+    let field = TextEdit::singleline(text).font(font).id(ui.make_persistent_id(hint)).hint_text(hint).desired_width(width);
     if !rtl {
         return ui.add(field);
     }
@@ -55,6 +63,12 @@ mod tests {
         assert!(is_rtl("مرحبا بالعالم"));
         assert!(is_rtl("שלום 123"));
         assert!(is_rtl("خط-تجربة"));
+    }
+
+    #[test]
+    fn family_follows_any_rtl_letter() {
+        assert_eq!(family("مرحبا hello"), crate::fonts::rtl_family());
+        assert_eq!(family("hello"), FontFamily::Proportional);
     }
 
     #[test]

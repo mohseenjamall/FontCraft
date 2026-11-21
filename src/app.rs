@@ -216,7 +216,7 @@ fn pick_font(ctx: &egui::Context, family: egui::FontFamily, sample: &str, size: 
     if ctx.fonts_mut(|f| f.has_glyphs(&own, sample)) {
         Drawn { font: own, color: ink, has_all: true }
     } else {
-        Drawn { font: FontId::proportional(size), color: Color32::from_gray(0xB8), has_all: false }
+        Drawn { font: FontId::new(size, crate::rtl::family(sample)), color: Color32::from_gray(0xB8), has_all: false }
     }
 }
 
@@ -328,7 +328,8 @@ impl FontApp {
                 for i in 0..self.sources.len() {
                     let count = self.families.iter().filter(|f| f.faces.iter().any(|x| x.source == i)).count();
                     let label = format!("{}  {}", self.sources[i].0, count);
-                    if ui.selectable_label(self.source == Some(i), label).clicked() {
+                    let text = RichText::new(&label).family(crate::rtl::family(&label));
+                    if ui.selectable_label(self.source == Some(i), text).clicked() {
                         self.source = Some(i);
                     }
                 }
@@ -388,7 +389,7 @@ impl FontApp {
         if lacks {
             meta.push_str("   ·   no glyphs for this text");
         }
-        painter.text(rect.left_top() + egui::vec2(8.0, 8.0), egui::Align2::LEFT_TOP, meta, FontId::proportional(12.0), Color32::from_gray(0x80));
+        painter.text(rect.left_top() + egui::vec2(8.0, 8.0), egui::Align2::LEFT_TOP, meta.clone(), FontId::new(12.0, crate::rtl::family(&meta)), Color32::from_gray(0x80));
         if on {
             let pill = egui::Rect::from_min_size(rect.right_top() + egui::vec2(-44.0, 6.0), egui::vec2(34.0, 16.0));
             painter.rect_filled(pill, 8.0, ACTION);
@@ -432,14 +433,15 @@ impl FontApp {
             .show(ui, |ui| {
                 ui.visuals_mut().override_text_color = Some(TEXT_MAIN);
                 ui.horizontal(|ui| {
-                    ui.heading(&name);
+                    ui.heading(RichText::new(&name).family(crate::rtl::family(&name)));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.button("×").on_hover_text("Close").clicked() {
                             self.selected = None;
                         }
                     });
                 });
-                ui.label(RichText::new(faces[0].path.display().to_string()).size(11.0).color(Color32::GRAY));
+                let path = faces[0].path.display().to_string();
+                ui.label(RichText::new(&path).family(crate::rtl::family(&path)).size(11.0).color(Color32::GRAY));
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     let (text, fill, color) = match (built_in, on) {
