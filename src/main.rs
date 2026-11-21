@@ -1,10 +1,12 @@
 #![cfg_attr(not(test), windows_subsystem = "windows")]
 mod activate;
 mod app;
+mod disabled;
 mod fonts;
 mod samples;
 mod scan;
 mod store;
+mod update;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -85,8 +87,13 @@ fn main() -> eframe::Result {
         "FontCraft",
         options,
         Box::new(move |cc| {
+            let checking = shot_path.is_some();
             let shot = shot_path.map(|path| Shot { path, requested: false, image: Default::default() });
             let mut app = app::FontApp::new(&cc.egui_ctx);
+            // Checks stay offline unless a test names the latest version itself.
+            if !checking || std::env::var_os("FONTCRAFT_LATEST").is_some() {
+                app.check_updates(&cc.egui_ctx);
+            }
             if let Some(text) = text {
                 app.set_text(text);
             }

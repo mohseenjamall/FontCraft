@@ -24,7 +24,9 @@ folders appear too (`scan::fontbase_activated`).
 
 ### FontCraft's own activation (`src/activate.rs`)
 
-Same three steps as FontBase's add-on, with its own marker so the two apps can share the key:
+Same three steps as FontBase's add-on, with its own marker so the two apps can share the key. It
+can also turn off fonts installed for the user and fonts FontBase turned on, saving their values so
+they come back exactly:
 
 | Rule | Value | Source |
 |---|---|---|
@@ -32,14 +34,32 @@ Same three steps as FontBase's add-on, with its own marker so the two apps can s
 | Marker | value `"<file stem> <8-hex FNV-1a 32 of the lowercased path> (FontCraft)"` = REG_SZ full path, in the same `HKCU\…\Fonts` key | FontCraft decision (hash keeps same-named files in two folders apart) |
 | Turn off | `RemoveFontResourceW(path)` (a 0 return is fine: the file may be gone), then delete the marker | follows 0x1800017f0 |
 | Broadcast | `PostMessageW(HWND_BROADCAST, WM_FONTCHANGE, 0, 0)` once per batch that changed something | 0x180001200 / 0x1800017f0 |
-| What counts as on | every file of the family has a `(FontCraft)` or `(FontBase)` value whose file still exists | FontCraft decision |
-| Who may toggle | only families whose files come from folders the person added; FontCraft never edits or deletes `(FontBase)` values | FontCraft decision |
+| What counts as on | every file of the family has some value in `HKCU\…\Fonts` (any name: `X (TrueType)`, `(FontBase)`, `(FontCraft)`) whose data is that file and the file exists; off-and-saved when its values are in the saved list | FontCraft decision |
+| Who may toggle | every family with no file directly in `%WINDIR%\Fonts`; those are system fonts (HKLM, all users) and show "System font: needs administrator" | FontCraft decision |
+| Values of a file | every `HKCU\…\Fonts` value whose REG_SZ / REG_EXPAND_SZ data is the file, compared case-insensitively; relative names resolve against `%LOCALAPPDATA%\Microsoft\Windows\Fonts` | `activate::values_for`, `disabled::data_path` |
+| Turn off (installed / FontBase) | save each value (name, type, raw bytes) to `%APPDATA%\FontCraft\disabled.tsv` first, then `RemoveFontResourceW`, delete the values, `WM_FONTCHANGE`. A `(FontCraft)` marker is just removed, not saved | `activate::turn_off_in` |
+| Turn on (saved) | `AddFontResourceW`, write every saved value back byte for byte under its original name, drop them from the saved list, `WM_FONTCHANGE`; with nothing saved, write a `(FontCraft)` marker | `activate::turn_on_in` |
+| Saved list | `disabled.tsv`, one value per line: `type<TAB>hex(name)<TAB>hex(bytes)`; missing = empty; unreadable lines are kept as they are on rewrite; written to a temp file then renamed | `src/disabled.rs` |
+| Safety | FontCraft never deletes a font file and never writes HKLM; system fonts are refused with an error before anything is touched | `activate::is_system_font` |
+| FontBase | a turned-off FontBase font stays listed (its saved file is scanned); FontBase may still show it as on until opened there, since FontBase keeps its own list | FontCraft decision |
 | Unit | per file: a `.ttc` holding several families turns them all on or off together | Windows loads whole files |
 
 FontBase.exe (214 MB) is the stock Electron/Chromium shell. Searching its strings for font
 settings finds only Chromium's web-preferences reader (`defaultFontSize`, `minimumFontSize`,
 referenced from sub_1403ba090); two attempts to decompile that function stopped the session
 before returning, so it stays unread. It is the browser's page default, not FontBase's slider.
+
+### Update notice (`src/update.rs`)
+
+| Rule | Value | Source |
+|---|---|---|
+| Latest version | the tag in GitHub's redirect from `https://github.com/mohseenjamall/FontCraft/releases/latest` to `…/releases/tag/<tag>` (no API, JSON or token) | FontCraft decision |
+| When | once per start, on a background thread, `curl.exe -s --max-time 10`, no console window | FontCraft decision |
+| Newer | `vMAJOR.MINOR.PATCH` (leading `v` optional, missing parts 0, `-`/`+` suffix ignored) strictly above `CARGO_PKG_VERSION` | `update::is_newer` |
+| Trusted link | the button only opens URLs starting `https://github.com/mohseenjamall/FontCraft/releases/` with no spaces, quotes, backslashes or `..` | `update::trusted` |
+| Banner | top bar in the accent colour, cannot be closed: "Update required: FontCraft <version> is available. Please update now." + Download update | `app::update_banner` |
+| No answer | offline, blocked, no curl, private repo (404) → no banner, no error | `update::check` |
+| Checks | `--screenshot` runs skip the network unless `FONTCRAFT_LATEST=<tag>` stands in for GitHub's answer | `main.rs` |
 
 ## JavaScript bundle
 

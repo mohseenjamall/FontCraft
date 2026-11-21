@@ -1,6 +1,6 @@
 [package]
 name = "fontcraft"
-version = "1.0.0"
+version = "1.1.0"
 description = "FontCraft: a fast native font browser and previewer"
 edition = "2024"
 
@@ -11,6 +11,17 @@ rfd = "0.18.0"
 ttf-parser = { version = "0.25.1", default-features = false, features = ["std"] }
 
 [profile.release]
+opt-level = 3
+
+# Unoptimized text shaping and rasterizing froze the window for over a second while fonts loaded,
+# so even debug builds (what `cargo build` makes) optimize the libraries; our own code stays debuggable.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev.package.epaint]
 opt-level = 3
 
 [target."cfg(windows)".dependencies]

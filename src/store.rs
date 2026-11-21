@@ -1,8 +1,18 @@
-﻿//! Remembers the folders the person added, one path per line.
+﻿//! Remembers the folders the person added, one path per line, in %APPDATA%\FontCraft.
 use std::path::PathBuf;
 
+fn dir() -> Option<PathBuf> {
+    std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("FontCraft"))
+}
+
 fn file() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("FontCraft").join("folders.txt"))
+    dir().map(|d| d.join("folders.txt"))
+}
+
+/// Where turned-off fonts' registry values are kept (see `disabled.rs`).
+pub fn disabled_list() -> PathBuf {
+    // An empty path makes saving fail with a clear error instead of writing somewhere unexpected.
+    dir().map(|d| d.join("disabled.tsv")).unwrap_or_default()
 }
 
 pub fn load_folders() -> Vec<PathBuf> {
