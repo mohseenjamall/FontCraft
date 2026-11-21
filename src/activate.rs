@@ -12,7 +12,6 @@ pub const FONTS_KEY: &str = r"Software\Microsoft\Windows NT\CurrentVersion\Fonts
 const OWN_SUFFIX: &str = " (FontCraft)";
 
 /// Where turned-on fonts are recorded: the registry key on Windows, the links folder elsewhere.
-#[allow(dead_code)] // app.rs moves from FONTS_KEY to this in the next change
 pub fn key() -> String {
     if cfg!(windows) {
         FONTS_KEY.into()
@@ -28,7 +27,6 @@ pub fn norm(path: &Path) -> PathBuf {
 }
 
 /// Why this file can't be turned on or off, or `None` when it can.
-#[allow(dead_code)] // app.rs uses this in the next change
 pub fn lock_reason(path: &Path) -> Option<&'static str> {
     #[cfg(windows)]
     return is_system_font(path).then_some("Installed for every user in Windows\\Fonts; FontCraft never changes these");
@@ -52,6 +50,7 @@ pub fn link_name(path: &Path) -> String {
 
 /// A file directly in %WINDIR%\Fonts: installed for every user through HKLM, so turning it off
 /// would need administrator rights and could break Windows. FontCraft never touches these.
+#[cfg(windows)]
 pub fn is_system_font(path: &Path) -> bool {
     let Some(windir) = std::env::var_os("WINDIR") else { return false };
     let fonts = norm(&Path::new(&windir).join("Fonts"));

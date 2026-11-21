@@ -51,15 +51,21 @@ pub fn scan(folders: Vec<(usize, PathBuf)>, tx: Sender<Face>) {
 }
 
 fn collect_files(dir: &Path, source: usize, out: &mut Vec<(usize, PathBuf)>) {
+    collect_skipping(dir, source, out, Path::new(&crate::activate::key()));
+}
+
+/// `collect_files` that ignores the folder `skip` (FontCraft's links folder: those fonts are
+/// listed from their originals, so scanning the links would list each one twice).
+fn collect_skipping(dir: &Path, source: usize, out: &mut Vec<(usize, PathBuf)>, skip: &Path) {
     if dir.is_file() {
         out.push((source, dir.to_path_buf()));
         return;
     }
-    walk(dir, source, out, &mut HashSet::new());
+    walk(dir, source, out, &mut HashSet::new(), skip);
 }
 
 /// Recursive walk; `seen` holds canonical dirs so symlink loops end instead of recursing forever.
-fn walk(dir: &Path, source: usize, out: &mut Vec<(usize, PathBuf)>, seen: &mut HashSet<PathBuf>) {
+fn walk(dir: &Path, source: usize, out: &mut Vec<(usize, PathBuf)>, seen: &mut HashSet<PathBuf>, skip: &Path) {
     let Ok(real) = std::fs::canonicalize(dir) else { return };
     if !seen.insert(real) {
         return;
@@ -68,7 +74,9 @@ fn walk(dir: &Path, source: usize, out: &mut Vec<(usize, PathBuf)>, seen: &mut H
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            walk(&path, source, out, seen);
+            if path != skip {
+                walk(&path, source, out, seen, skip);
+            }
         } else if path
             .extension()
             .and_then(|e| e.to_str())
@@ -141,9 +149,10 @@ pub fn fontbase_activated() -> Vec<PathBuf> {
         .collect()
 }
 
+/// Original files behind FontCraft's links, so a font linked from an unscanned folder stays listed.
 #[cfg(not(windows))]
 pub fn fontbase_activated() -> Vec<PathBuf> {
-    Vec::new()
+    crate::activate::read_active(&crate::activate::key()).into_iter().collect()
 }
 
 #[cfg(test)]
@@ -156,6 +165,20 @@ mod tests {
         let (_, dir) = system_folders().into_iter().next().expect("windows fonts folder");
         let faces = faces_in_file(&dir.join("arial.ttf"), 0);
         assert!(faces.iter().any(|f| f.family == "Arial" && f.weight == 400 && !f.italic));
+    }
+
+    #[test]
+    fn scan_skips_the_links_folder() {
+        let root = std::env::temp_dir().join(format!("fontcraft_skip_{}", std::process::id()));
+        let links = root.join("FontCraft");
+        std::fs::create_dir_all(&links).unwrap();
+        std::fs::write(root.join("a.ttf"), b"x").unwrap();
+        std::fs::write(links.join("a-1234.ttf"), b"x").unwrap();
+        let mut out = Vec::new();
+        collect_skipping(&root, 0, &mut out, &links);
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(out.len(), 1);
+        assert!(out[0].1.ends_with("a.ttf"));
     }
 
     #[cfg(unix)]

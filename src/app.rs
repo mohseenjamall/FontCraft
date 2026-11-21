@@ -1,7 +1,7 @@
 //! The window: dark header with preview text and size, dark sidebar with font sources,
 //! light list of font families previewed in their own typeface, and a detail panel.
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use eframe::egui::{self, Color32, FontId, RichText};
@@ -47,8 +47,20 @@ impl Family {
 }
 
 /// On for every app only when every one of its files is on (`active` holds `activate::norm` keys).
-fn all_active(active: &HashSet<PathBuf>, fam: &Family) -> bool {
-    fam.faces.iter().all(|f| active.contains(&activate::norm(&f.path)))
+fn all_active(active: &HashSet<PathBuf>, disabled: &HashSet<PathBuf>, fam: &Family) -> bool {
+    let user_fonts = if cfg!(unix) { crate::platform::user_fonts_dir().unwrap_or_default() } else { PathBuf::new() };
+    all_active_in(active, disabled, &user_fonts, Path::new(&activate::key()), fam)
+}
+
+/// `all_active` with the folders given: a file put straight in `user_fonts` (outside `links`) is
+/// on by default until turned off, because the system loads it without any link. An empty
+/// `user_fonts` turns that off (Windows keeps its fonts in the registry instead).
+fn all_active_in(active: &HashSet<PathBuf>, disabled: &HashSet<PathBuf>, user_fonts: &Path, links: &Path, fam: &Family) -> bool {
+    fam.faces.iter().all(|f| {
+        let key = activate::norm(&f.path);
+        active.contains(&key)
+            || (!user_fonts.as_os_str().is_empty() && f.path.starts_with(user_fonts) && !f.path.starts_with(links) && !disabled.contains(&key))
+    })
 }
 
 /// Files FontBase turned on: from its registry values, and from values FontCraft saved when
@@ -56,7 +68,9 @@ fn all_active(active: &HashSet<PathBuf>, fam: &Family) -> bool {
 fn fontbase_files(store: &std::path::Path) -> HashSet<PathBuf> {
     let saved = crate::disabled::Saved::load(store);
     let turned_off = saved.entries.iter().filter(|e| e.name.contains("(FontBase)")).filter_map(|e| e.path());
-    scan::fontbase_activated().into_iter().chain(turned_off).map(|p| activate::norm(&p)).collect()
+    // On macOS/Linux that list is FontCraft's own links, not FontBase's.
+    let theirs = if cfg!(windows) { scan::fontbase_activated() } else { Vec::new() };
+    theirs.into_iter().chain(turned_off).map(|p| activate::norm(&p)).collect()
 }
 
 pub struct FontApp {
@@ -101,7 +115,8 @@ impl FontApp {
         let mut sources = scan::system_folders();
         let activated = sources.len();
         // Fonts FontBase activated from other folders (scanned file by file).
-        sources.push(("Activated by FontBase".into(), PathBuf::new()));
+        let label = if cfg!(windows) { "Activated by FontBase" } else { "Turned on by FontCraft" };
+        sources.push((label.into(), PathBuf::new()));
         sources.extend(crate::store::load_folders().into_iter().map(|p| (folder_label(&p), p)));
         let mut jobs: Vec<(usize, PathBuf)> =
             sources.iter().cloned().enumerate().filter(|(i, _)| *i != activated).map(|(i, (_, p))| (i, p)).collect();
@@ -126,7 +141,7 @@ impl FontApp {
             source: None,
             selected: None,
             selected_face: 0,
-            active: activate::read_active(activate::FONTS_KEY),
+            active: activate::read_active(&activate::key()),
             disabled: activate::read_disabled(&store),
             fontbase_files: fontbase_files(&store),
             store,
@@ -151,14 +166,18 @@ impl FontApp {
         self.selected = Some(name);
     }
 
-    /// Every family except one with a file in %WINDIR%\Fonts (that needs administrator rights).
+    /// Why this family can't be turned on or off (its first locked file), or `None`.
+    fn lock(fam: &Family) -> Option<&'static str> {
+        fam.faces.iter().find_map(|f| activate::lock_reason(&f.path))
+    }
+
     fn can_toggle(&self, fam: &Family) -> bool {
-        !fam.faces.iter().any(|f| activate::is_system_font(&f.path))
+        Self::lock(fam).is_none()
     }
 
     fn toggle(&mut self, name: &str) {
         let store = self.store.clone();
-        self.toggle_in(name, activate::FONTS_KEY, &store);
+        self.toggle_in(name, &activate::key(), &store);
     }
 
     /// Turns the family's files off when all are on, otherwise on, under `key` with the saved
@@ -169,7 +188,7 @@ impl FontApp {
             return;
         }
         let files = fam.files();
-        let result = if all_active(&self.active, fam) {
+        let result = if all_active(&self.active, &self.disabled, fam) {
             activate::turn_off_in(key, store, &files)
         } else {
             activate::turn_on_in(key, store, &files)
@@ -453,7 +472,7 @@ impl FontApp {
         let face = fam.main_face().clone();
         let selected = self.selected.as_deref() == Some(fam.name.as_str());
         let (name, styles) = (fam.name.clone(), fam.faces.len());
-        let on = all_active(&self.active, fam);
+        let on = all_active(&self.active, &self.disabled, fam);
         let family = self.loader.family(&face);
         let sample = self.sample(&face);
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), row_h), egui::Sense::click());
@@ -493,10 +512,11 @@ impl FontApp {
         let Some(fam) = self.families.iter().find(|f| f.name == name) else { return };
         let faces = fam.faces.clone();
         let files = fam.files();
-        let on = all_active(&self.active, fam);
+        let on = all_active(&self.active, &self.disabled, fam);
         let saved_off = files.iter().any(|f| self.disabled.contains(&activate::norm(f)));
         let by_fontbase = files.iter().any(|f| self.fontbase_files.contains(&activate::norm(f)));
-        let can = self.can_toggle(fam);
+        let lock = Self::lock(fam);
+        let can = lock.is_none();
         let shares: Vec<String> = self
             .families
             .iter()
@@ -522,14 +542,14 @@ impl FontApp {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     let (text, fill, color) = match (can, on) {
-                        (false, _) => ("System font: needs administrator", Color32::from_gray(0xEE), TEXT_MAIN),
+                        (false, _) => {
+                            (if cfg!(windows) { "System font: needs administrator" } else { "Locked" }, Color32::from_gray(0xEE), TEXT_MAIN)
+                        }
                         (true, true) => ("Turn off", Color32::from_gray(0xEE), TEXT_MAIN),
                         (true, false) => ("Turn on", ACTION, Color32::WHITE),
                     };
                     let resp = ui.add_enabled(can, egui::Button::new(RichText::new(text).color(color)).fill(fill));
-                    clicked = resp
-                        .on_disabled_hover_text("Installed for every user in Windows\\Fonts; FontCraft never changes these")
-                        .clicked();
+                    clicked = resp.on_disabled_hover_text(lock.unwrap_or_default()).clicked();
                     if on && can {
                         ui.label(RichText::new("On for all apps").size(12.0).color(ACTION));
                     } else if saved_off {
@@ -667,12 +687,49 @@ mod tests {
     }
 
     #[test]
+    fn user_font_is_on_until_rejected() {
+        let user = Path::new("/home/u/.local/share/fonts");
+        let links = user.join("FontCraft");
+        let fam = |p: &str| Family { name: "X".into(), faces: vec![sourced(p.as_ref(), "X", 1)] };
+        let (none, off) = (HashSet::new(), HashSet::from([PathBuf::from("/home/u/.local/share/fonts/a.ttf")]));
+        let own = fam("/home/u/.local/share/fonts/a.ttf");
+        assert!(all_active_in(&none, &none, user, &links, &own));
+        assert!(!all_active_in(&none, &off, user, &links, &own));
+        // Elsewhere, or inside the links folder, a font is on only when linked.
+        assert!(!all_active_in(&none, &none, user, &links, &fam("/data/a.ttf")));
+        assert!(!all_active_in(&none, &none, user, &links, &fam("/home/u/.local/share/fonts/FontCraft/a-1.ttf")));
+        assert!(!all_active_in(&none, &none, Path::new(""), &links, &own));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_system_font_cannot_toggle() {
+        let app = FontApp::for_test(3, vec![sourced("/usr/share/fonts/a.ttf".as_ref(), "X", 0)]);
+        assert!(!app.can_toggle(&app.families[0]));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_toggle_links_font_from_added_folder() {
+        let dir = std::env::temp_dir().join(format!("fontcraft_app_toggle_{}", std::process::id()));
+        let (links, font) = (dir.join("links"), dir.join("added").join("a.ttf"));
+        std::fs::create_dir_all(font.parent().unwrap()).unwrap();
+        std::fs::write(&font, b"x").unwrap();
+        let mut app = FontApp::for_test(3, vec![sourced(&font, "X", 3)]);
+        app.toggle_in("X", links.to_str().unwrap(), &dir.join("fonts.conf"));
+        let on = app.active.contains(&font);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(app.notice, None);
+        assert!(on);
+    }
+
+    #[test]
     fn is_active_requires_all_files_active() {
         let fam = Family { name: "X".into(), faces: vec![sourced("a.ttf".as_ref(), "X", 3), sourced("b.ttf".as_ref(), "X", 3)] };
         let mut active = HashSet::from([PathBuf::from("a.ttf")]);
-        assert!(!all_active(&active, &fam));
+        assert!(!all_active(&active, &HashSet::new(), &fam));
         active.insert(PathBuf::from("b.ttf"));
-        assert!(all_active(&active, &fam));
+        assert!(all_active(&active, &HashSet::new(), &fam));
     }
 
     #[cfg(windows)]
@@ -683,9 +740,9 @@ mod tests {
         let mut app = FontApp::for_test(3, vec![sourced(&f, "X", 3)]);
         app.toggle_in("X", &s.key, &s.store());
         assert_eq!(app.notice, None);
-        assert!(all_active(&app.active, &app.families[0]));
+        assert!(all_active(&app.active, &app.disabled, &app.families[0]));
         app.toggle_in("X", &s.key, &s.store());
-        assert!(!all_active(&app.active, &app.families[0]));
+        assert!(!all_active(&app.active, &app.disabled, &app.families[0]));
         // A system family is never touched.
         let mut system = FontApp::for_test(3, vec![sourced(&env_path("WINDIR", r"Fonts\arial.ttf"), "Y", 0)]);
         system.toggle_in("Y", &s.key, &s.store());
@@ -702,11 +759,11 @@ mod tests {
         app.active = crate::activate::read_active(&s.key);
         app.toggle_in("X", &s.key, &s.store());
         assert_eq!(app.notice, None);
-        assert!(!all_active(&app.active, &app.families[0]));
+        assert!(!all_active(&app.active, &app.disabled, &app.families[0]));
         assert!(app.disabled.contains(&crate::activate::norm(&f)));
         app.toggle_in("X", &s.key, &s.store());
         assert_eq!(app.notice, None);
-        assert!(all_active(&app.active, &app.families[0]));
+        assert!(all_active(&app.active, &app.disabled, &app.families[0]));
         assert!(app.disabled.is_empty());
     }
 
