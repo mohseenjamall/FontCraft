@@ -1,4 +1,5 @@
 //! Finds font files and reads their family / style names (no rendering here).
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 
@@ -54,11 +55,20 @@ fn collect_files(dir: &Path, source: usize, out: &mut Vec<(usize, PathBuf)>) {
         out.push((source, dir.to_path_buf()));
         return;
     }
+    walk(dir, source, out, &mut HashSet::new());
+}
+
+/// Recursive walk; `seen` holds canonical dirs so symlink loops end instead of recursing forever.
+fn walk(dir: &Path, source: usize, out: &mut Vec<(usize, PathBuf)>, seen: &mut HashSet<PathBuf>) {
+    let Ok(real) = std::fs::canonicalize(dir) else { return };
+    if !seen.insert(real) {
+        return;
+    }
     let Ok(entries) = std::fs::read_dir(dir) else { return };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            collect_files(&path, source, out);
+            walk(&path, source, out, seen);
         } else if path
             .extension()
             .and_then(|e| e.to_str())
@@ -146,5 +156,22 @@ mod tests {
         let (_, dir) = system_folders().into_iter().next().expect("windows fonts folder");
         let faces = faces_in_file(&dir.join("arial.ttf"), 0);
         assert!(faces.iter().any(|f| f.family == "Arial" && f.weight == 400 && !f.italic));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn scan_finishes_on_symlink_loop() {
+        let root = std::env::temp_dir().join(format!("fontcraft_loop_{}", std::process::id()));
+        let fonts = root.join("fonts");
+        std::fs::create_dir_all(&fonts).unwrap();
+        std::fs::write(fonts.join("a.ttf"), b"not a font").unwrap();
+        std::os::unix::fs::symlink(&root, fonts.join("loop")).unwrap();
+
+        let mut out = Vec::new();
+        collect_files(&fonts, 0, &mut out);
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert_eq!(out.len(), 1);
+        assert!(out[0].1.ends_with("a.ttf"));
     }
 }
