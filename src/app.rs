@@ -105,6 +105,8 @@ pub struct FontApp {
     update_error: Option<String>,
     /// Set while "Update now" downloads and swaps the program.
     installing: Option<Receiver<Result<(), String>>>,
+    /// The support-card picture, uploaded once (None in tests).
+    art: Option<egui::TextureHandle>,
     pub frames: u32,
 }
 
@@ -150,6 +152,7 @@ impl FontApp {
             updates: None,
             update_error: None,
             installing: None,
+            art: Some(ctx.load_texture("app-art", crate::support::art_image(), egui::TextureOptions::LINEAR)),
             frames: 0,
         }
     }
@@ -437,6 +440,9 @@ impl FontApp {
                     self.add_folder(dir);
                 }
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
+                    // First in a bottom-up layout = lowest on screen.
+                    self.support_card(ui);
+                    ui.add_space(8.0);
                     let status = if self.scan_done {
                         format!("{} styles", self.faces.len())
                     } else {
@@ -445,6 +451,28 @@ impl FontApp {
                     ui.label(RichText::new(status).size(11.0).color(Color32::GRAY));
                 });
             });
+    }
+
+    /// Small card at the bottom of the side panel: picture, thanks line and the coffee link.
+    fn support_card(&mut self, ui: &mut egui::Ui) {
+        // Fixed height (56px picture + margins): the sidebar's bottom-up layout would otherwise stretch the frame.
+        let size = egui::vec2(ui.available_width(), 72.0);
+        ui.allocate_ui_with_layout(size, egui::Layout::top_down(egui::Align::LEFT), |ui| {
+            egui::Frame::NONE.fill(Color32::from_rgb(0x22, 0x22, 0x22)).corner_radius(8.0).inner_margin(8.0).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                if let Some(art) = &self.art {
+                    ui.add(egui::Image::new((art.id(), egui::vec2(56.0, 56.0))).corner_radius(8.0));
+                }
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("Support FontCraft").size(12.0).color(TEXT_LIGHT));
+                    let coffee = egui::Button::new(RichText::new("Buy me a coffee").size(12.0).color(Color32::WHITE)).fill(ACTION);
+                    if ui.add(coffee).clicked() {
+                        self.notice = crate::support::open_support().err();
+                    }
+                });
+                });
+            });
+        });
     }
 
     fn list(&mut self, ui: &mut egui::Ui) {
@@ -640,6 +668,7 @@ mod tests {
                 updates: None,
                 update_error: None,
                 installing: None,
+                art: None,
                 frames: 0,
             }
         }

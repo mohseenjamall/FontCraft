@@ -9,6 +9,7 @@ mod platform;
 mod samples;
 mod scan;
 mod store;
+mod support;
 mod update;
 
 use std::path::PathBuf;
@@ -76,7 +77,8 @@ fn main() -> eframe::Result {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("FontCraft")
         .with_inner_size([1280.0, 800.0])
-        .with_min_inner_size([720.0, 480.0]);
+        .with_min_inner_size([720.0, 480.0])
+        .with_icon(std::sync::Arc::new(support::app_icon()));
     if shot_path.is_some() {
         // Don't steal focus from the person while a check runs.
         viewport = viewport.with_active(false);
