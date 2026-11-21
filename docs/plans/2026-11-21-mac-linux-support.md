@@ -218,3 +218,18 @@
 - **Coverage:** paths (2), scanning (3), updater (4), activation (5, 6), fallback fonts (2), CI (1), packaging (7), site/docs (7, 8). Window/AlwaysOnBottom in `main.rs` is already `cfg(windows)`; no change needed.
 - **Names:** `key()`, `norm`, `lock_reason`, `link_name`, `read_active/read_disabled/turn_on_in/turn_off_in` are identical in Tasks 5 and 6.
 - **Risks the user must know:** macOS behaviour (symlinked fonts in `~/Library/Fonts`, Gatekeeper on an unsigned binary) is untested until someone runs it on a Mac; Linux running apps usually need a restart to see font changes; reject rules affect fontconfig apps only (not every Linux app).
+
+---
+
+### Task 9 (added later by user request): Support link and app picture inside the app
+
+**Files:**
+- Create: `assets/app-art.png` (256x256, made from `site/src/assets/engraving-hero.jpg`, the user's engraving of the "F"), `src/support.rs`
+- Modify: `src/main.rs` (window icon via `ViewportBuilder::with_icon`, `mod support;`), `src/app.rs` (support card in the side panel/bottom), `src/update.rs` only if reusing `open`
+- Test: tests in `src/support.rs`
+
+**Interfaces:**
+- Produces: `pub const SUPPORT_URL: &str = "https://buymeacoffee.com/mohseenjamalll"`; `pub fn open_support() -> Result<(), String>` (opens only `SUPPORT_URL`, same openers as `update::open`: explorer / open / xdg-open); `pub fn app_icon() -> egui::IconData` decoded from `include_bytes!("../assets/app-art.png")` with the `image` crate (png feature already enabled).
+- [ ] **Step 1: Failing tests**: `support_url_is_the_buymeacoffee_page` (exact string); `app_icon_is_256_square_rgba` (width == height == 256, `rgba.len() == 256*256*4`); `open_support_refuses_other_urls` is not needed (no input).
+- [ ] **Step 2: Run** `cargo test support` → FAIL. **Step 3: Implement**; the card shows the picture (64px, rounded) plus "Support FontCraft" and a "Buy me a coffee" button calling `open_support`, errors shown through the existing `notice`. **Step 4: Run** `cargo test` → PASS; screenshot check with `--screenshot`. **Step 5: Commit** `feat: support link and app picture`.
+- Not covered: embedding the icon into the `.exe` file itself (needs a Windows resource build step); the window/taskbar icon only.
