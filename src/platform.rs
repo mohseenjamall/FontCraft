@@ -1,11 +1,12 @@
 //! Every OS-specific path in one place: where settings live, where fonts are installed or loaded from.
 use std::path::{Path, PathBuf};
 
-/// XDG rule: use `xdg` only if absolute, else `home/home_rel`, else nothing (never a relative path).
+/// XDG rule: use `xdg` only if absolute, else `home/home_rel` if home is absolute, else nothing
+/// (never a relative path).
 pub fn linux_dir(home: Option<&Path>, xdg: Option<&Path>, home_rel: &str) -> Option<PathBuf> {
     match xdg {
         Some(x) if x.is_absolute() => Some(x.to_path_buf()),
-        _ => home.map(|h| h.join(home_rel)),
+        _ => home.filter(|h| h.is_absolute()).map(|h| h.join(home_rel)),
     }
 }
 
@@ -90,6 +91,12 @@ mod tests {
     fn linux_dir_ignores_relative_xdg() {
         let h = abs("home");
         assert_eq!(linux_dir(Some(&h), Some(Path::new("rel")), ".local/share"), Some(h.join(".local/share")));
+    }
+
+    #[test]
+    fn linux_dir_ignores_relative_home() {
+        assert_eq!(linux_dir(Some(Path::new("rel")), None, ".config"), None);
+        assert_eq!(linux_dir(Some(Path::new("rel")), Some(Path::new("x")), ".config"), None);
     }
 
     #[test]

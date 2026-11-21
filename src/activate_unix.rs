@@ -11,6 +11,7 @@ use crate::activate::{link_name, norm};
 
 const SYSTEM_LOCK: &str = "Installed for every user; FontCraft never changes these";
 const MAC_LOCK: &str = "macOS manages fonts in ~/Library/Fonts; use Font Book to turn these off";
+const LINK_LOCK: &str = "FontCraft's own link; turn off the original font instead";
 const MAC: bool = cfg!(target_os = "macos");
 /// fontconfig reads `<glob>` as a pattern, so a path holding one of these could hide other fonts.
 const GLOB_CHARS: [char; 3] = ['*', '?', '['];
@@ -24,7 +25,9 @@ const CONF_TAIL: &str = "</rejectfont></selectfont>\n</fontconfig>\n";
 
 /// Why this file can't be turned on or off here, if it can't.
 pub fn lock_reason_in(path: &Path, user_fonts: &Path, links: &Path) -> Option<&'static str> {
-    if crate::platform::system_font_dirs().iter().any(|d| path.starts_with(d)) {
+    if !links.as_os_str().is_empty() && path.starts_with(links) {
+        Some(LINK_LOCK)
+    } else if crate::platform::system_font_dirs().iter().any(|d| path.starts_with(d)) {
         Some(SYSTEM_LOCK)
     } else if MAC && is_user_font(path, user_fonts, links) {
         Some(MAC_LOCK)
@@ -198,6 +201,10 @@ fn refresh(links: &Path, changed: usize) {
 fn write_reject_conf(conf: &Path, paths: &BTreeSet<PathBuf>) -> Result<(), String> {
     let globs: String = paths.iter().map(|p| format!("<glob>{}</glob>\n", escape(&p.to_string_lossy()))).collect();
     let fail = |e: std::io::Error| format!("can't save the list of fonts you turned off ({}): {e}", conf.display());
+    if !conf.is_absolute() {
+        // A relative path (e.g. from a relative HOME) would write into the current folder.
+        return Err(fail(std::io::Error::other("can't find your settings folder (is HOME set?)")));
+    }
     if let Some(dir) = conf.parent() {
         std::fs::create_dir_all(dir).map_err(fail)?;
     }
@@ -378,6 +385,29 @@ mod tests {
         assert_eq!(t.on(&[f.clone()]), Ok(1));
         assert!(read_disabled(&t.conf()).is_empty());
         assert!(f.is_file());
+    }
+
+    #[test]
+    fn relative_conf_path_is_refused_and_nothing_written() {
+        let t = Tmp::new("relconf");
+        let rel = PathBuf::from(format!("fontcraft-relconf-{}", std::process::id()));
+        let conf = rel.join("99-fontcraft.conf");
+        let paths: BTreeSet<PathBuf> = [t.fonts().join("x.ttf")].into_iter().collect();
+        assert!(write_reject_conf(&conf, &paths).is_err());
+        let f = t.file("fonts", "u.ttf");
+        assert!(turn_off_with(&t.fonts(), &t.links(), &conf, &[f]).is_err());
+        assert!(!rel.exists(), "nothing created in the current folder");
+    }
+
+    #[test]
+    fn links_folder_entries_are_locked() {
+        let t = Tmp::new("linklock");
+        let link = t.links().join("a-0123abcd.ttf");
+        let reason = lock_reason_in(&link, &t.fonts(), &t.links()).unwrap();
+        assert!(reason.contains("FontCraft's own link"), "{reason}");
+        assert!(t.on(&[link.clone()]).unwrap_err().contains("FontCraft's own link"));
+        assert!(t.off(&[link]).unwrap_err().contains("FontCraft's own link"));
+        assert!(!t.links().exists() && !t.conf().exists());
     }
 
     #[cfg(target_os = "macos")]
