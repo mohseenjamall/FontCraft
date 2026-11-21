@@ -12,6 +12,9 @@ self-replace = "1.5.1"
 sha2 = "0.11.1"
 ttf-parser = { version = "0.25.1", default-features = false, features = ["std"] }
 
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+eframe = { version = "0.37.0", default-features = false, features = ["x11", "wayland"] }
+
 [profile.release]
 opt-level = 3
 

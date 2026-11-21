@@ -106,6 +106,7 @@ impl Saved {
         self.entries.iter().filter(|e| e.path().is_some_and(|p| crate::activate::norm(&p) == want)).cloned().collect()
     }
 
+    #[cfg_attr(not(windows), allow(dead_code))] // only the Windows activator removes entries
     pub fn remove(&mut self, gone: &[Entry]) {
         self.entries.retain(|e| !gone.contains(e));
     }
