@@ -112,7 +112,7 @@ pub fn system_folders() -> Vec<(String, PathBuf)> {
         out.push(("System".to_string(), PathBuf::from(win).join("Fonts")));
     }
     if let Some(local) = std::env::var_os("LOCALAPPDATA") {
-        out.push(("User installed".to_string(), PathBuf::from(local).join("Microsoft/Windows/Fonts")));
+        out.push(("User installed".to_string(), PathBuf::from(local).join(r"Microsoft\Windows\Fonts")));
     }
     out
 }

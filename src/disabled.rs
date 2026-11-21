@@ -100,10 +100,10 @@ impl Saved {
         }
     }
 
-    /// Entries whose data points at `path` (case-insensitive, as Windows compares paths).
+    /// Entries whose data points at `path`, compared the way Windows compares paths.
     pub fn for_path(&self, path: &Path) -> Vec<Entry> {
-        let want = path.to_string_lossy().to_lowercase();
-        self.entries.iter().filter(|e| e.path().is_some_and(|p| p.to_string_lossy().to_lowercase() == want)).cloned().collect()
+        let want = crate::activate::norm(path);
+        self.entries.iter().filter(|e| e.path().is_some_and(|p| crate::activate::norm(&p) == want)).cloned().collect()
     }
 
     pub fn remove(&mut self, gone: &[Entry]) {

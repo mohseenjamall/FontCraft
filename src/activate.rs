@@ -15,9 +15,9 @@ const OWN_SUFFIX: &str = " (FontCraft)";
 
 /// Registry value name for a file: "<stem> <fnv1a-32 of the lowercased path> (FontCraft)".
 /// The hash keeps two files with the same name in different folders apart.
-/// Path as a set key: Windows compares paths without regard to case.
+/// Path as a set key: Windows treats paths without regard to case and `/` the same as `\`.
 pub fn norm(path: &Path) -> std::path::PathBuf {
-    path.to_string_lossy().to_lowercase().into()
+    path.to_string_lossy().to_lowercase().replace('/', "\\").into()
 }
 
 /// A file directly in %WINDIR%\Fonts: installed for every user through HKLM, so turning it off
@@ -506,6 +506,25 @@ pub(crate) mod tests {
         assert!(s.raw("Foo Regular (TrueType)") == Some(before), "value must come back byte for byte");
         assert!(saved(&s).is_empty());
         assert!(read_active(&s.key).contains(&norm(&f)));
+    }
+
+    /// The scanner may hand over "…\Microsoft/Windows/Fonts\x.ttf" while the registry holds
+    /// "…\Microsoft\Windows\Fonts\x.ttf": same file, so the saved value must still come back.
+    #[test]
+    fn mixed_slashes_still_restore_the_saved_value() {
+        let s = Scratch::new("slashes");
+        let f = s.font("slash.ttf");
+        s.install("Slash Regular (TrueType)", &f);
+        let before = s.raw("Slash Regular (TrueType)").unwrap();
+        let mixed = PathBuf::from(f.to_string_lossy().replacen('\\', "/", 2));
+        assert_ne!(mixed.as_os_str(), f.as_os_str());
+        assert_eq!(turn_off_in(&s.key, &s.store(), &[mixed.clone()]), Ok(1));
+        assert!(read_disabled(&s.store()).contains(&norm(&mixed)));
+        assert_eq!(turn_on_in(&s.key, &s.store(), &[mixed.clone()]), Ok(1));
+        assert!(s.raw("Slash Regular (TrueType)") == Some(before), "original value must come back");
+        assert!(!is_owned(&s.key, &mixed), "no FontCraft marker instead of the original");
+        assert!(saved(&s).is_empty());
+        assert!(read_active(&s.key).contains(&norm(&mixed)));
     }
 
     #[test]

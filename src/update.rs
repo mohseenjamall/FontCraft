@@ -89,6 +89,71 @@ pub fn spawn_check(ctx: egui::Context) -> Receiver<Update> {
     rx
 }
 
+const DOWNLOADS: &str = "https://github.com/mohseenjamall/FontCraft/releases/download/";
+
+/// The program file every release must attach, e.g. `FontCraft-1.2.0-windows-x64.exe`.
+fn asset_name(version: &str) -> String {
+    format!("FontCraft-{version}-windows-x64.exe")
+}
+
+/// The SHA-256 that `SHA256SUMS.txt` (lines of `<hex>  <file>`) lists for `file`.
+fn expected_hash(sums: &str, file: &str) -> Option<String> {
+    sums.lines().find_map(|l| {
+        let (hash, name) = l.trim().split_once(char::is_whitespace)?;
+        (name.trim() == file && hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit())).then(|| hash.to_lowercase())
+    })
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn download(url: &str, to: &std::path::Path) -> Result<(), String> {
+    let out = curl()
+        .args(["-fsSL", "--max-time", "300", "-o"])
+        .arg(to)
+        .arg(url)
+        .output()
+        .map_err(|e| format!("couldn't start the download: {e}"))?;
+    if out.status.success() { Ok(()) } else { Err(format!("download failed ({url})")) }
+}
+
+/// Downloads the release's program, checks it against the release's SHA256SUMS.txt and puts it in
+/// place of the running program. The new version runs from the next start (see `restart`).
+pub fn install(u: &Update) -> Result<(), String> {
+    version(&u.version).ok_or_else(|| format!("bad version {}", u.version))?;
+    let dir = std::env::temp_dir().join(format!("fontcraft-update-{}", u.version));
+    std::fs::create_dir_all(&dir).map_err(|e| format!("couldn't make a download folder: {e}"))?;
+    let base = format!("{DOWNLOADS}v{}/", u.version);
+    let (exe, sums) = (dir.join(asset_name(&u.version)), dir.join("SHA256SUMS.txt"));
+    download(&format!("{base}SHA256SUMS.txt"), &sums)?;
+    let listed = std::fs::read_to_string(&sums).map_err(|e| format!("couldn't read the checksums: {e}"))?;
+    let want = expected_hash(&listed, &asset_name(&u.version)).ok_or("the release doesn't list a checksum for the program")?;
+    download(&format!("{base}{}", asset_name(&u.version)), &exe)?;
+    let bytes = std::fs::read(&exe).map_err(|e| format!("couldn't read the download: {e}"))?;
+    if sha256_hex(&bytes) != want {
+        return Err("the download doesn't match its checksum; nothing was changed".into());
+    }
+    self_replace::self_replace(&exe).map_err(|e| format!("couldn't replace FontCraft (is it in a protected folder?): {e}"))
+}
+
+/// Installs in the background; the result arrives on the receiver and the window repaints.
+pub fn spawn_install(u: Update, ctx: egui::Context) -> Receiver<Result<(), String>> {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(install(&u));
+        ctx.request_repaint();
+    });
+    rx
+}
+
+/// Starts the (now updated) program again; the caller then closes this window.
+pub fn restart() -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| format!("couldn't find FontCraft: {e}"))?;
+    Command::new(exe).spawn().map(drop).map_err(|e| format!("updated, but couldn't restart: {e}"))
+}
+
 /// Opens a release page in the default browser.
 pub fn open(url: &str) -> Result<(), String> {
     if !trusted(url) {
@@ -160,6 +225,39 @@ mod tests {
         unsafe { std::env::remove_var("FONTCRAFT_LATEST") };
         assert_eq!(newer.map(|u| u.version), Some("9.9.9".into()));
         assert_eq!(same, None);
+    }
+
+    #[test]
+    fn finds_the_programs_checksum_only() {
+        let h = "d3808ce8710df2084c063da78e6a77c862c35c09bf1f66af6e470fe44428056f";
+        let sums = format!("{}  FontCraft-1.1.0-windows-x64.zip\n{h}  FontCraft-1.1.0-windows-x64.exe\n", "a".repeat(64));
+        assert_eq!(expected_hash(&sums, &asset_name("1.1.0")), Some(h.to_owned()));
+        assert_eq!(expected_hash(&sums, &asset_name("1.2.0")), None);
+        assert_eq!(expected_hash("short  FontCraft-1.1.0-windows-x64.exe", &asset_name("1.1.0")), None);
+    }
+
+    #[test]
+    fn sha256_matches_a_known_value() {
+        assert_eq!(sha256_hex(b"abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    }
+
+    /// Downloads the real latest release's program and checks it against its checksum, without
+    /// replacing anything; run with `--ignored`.
+    #[test]
+    #[ignore]
+    fn live_download_matches_checksum() {
+        let latest = redirect_target(&fetch().unwrap()).unwrap().rsplit('/').next().unwrap().trim_start_matches('v').to_owned();
+        let dir = std::env::temp_dir().join(format!("fontcraft-live-download-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let base = format!("{DOWNLOADS}v{latest}/");
+        let (exe, sums) = (dir.join(asset_name(&latest)), dir.join("SHA256SUMS.txt"));
+        download(&format!("{base}SHA256SUMS.txt"), &sums).unwrap();
+        download(&format!("{base}{}", asset_name(&latest)), &exe).unwrap();
+        let want = expected_hash(&std::fs::read_to_string(&sums).unwrap(), &asset_name(&latest)).unwrap();
+        let got = sha256_hex(&std::fs::read(&exe).unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(got, want);
+        println!("live download ok: v{latest} {got}");
     }
 
     /// Asks the real GitHub; run with `--ignored`. Private repo → "404", public → "302 …".

@@ -89,6 +89,8 @@ pub struct FontApp {
     updates: Option<Receiver<crate::update::Update>>,
     /// Why the download page couldn't be opened, shown in the banner.
     update_error: Option<String>,
+    /// Set while "Update now" downloads and swaps the program.
+    installing: Option<Receiver<Result<(), String>>>,
     pub frames: u32,
 }
 
@@ -132,6 +134,7 @@ impl FontApp {
             update: None,
             updates: None,
             update_error: None,
+            installing: None,
             frames: 0,
         }
     }
@@ -332,16 +335,34 @@ impl eframe::App for FontApp {
 impl FontApp {
     /// Topmost bar while a newer release exists; it can't be closed, only acted on.
     fn update_banner(&mut self, ui: &mut egui::Ui) {
-        let Some(u) = &self.update else { return };
-        let (text, url) = (format!("Update required: FontCraft {} is available. Please update now.", u.version), u.url.clone());
+        let Some(update) = self.update.clone() else { return };
+        let (text, url) = (format!("Update required: FontCraft {} is available. Please update now.", update.version), update.url.clone());
+        let ctx = ui.ctx().clone();
+        if let Some(done) = self.installing.as_ref().and_then(|rx| rx.try_recv().ok()) {
+            self.installing = None;
+            match done.and_then(|()| crate::update::restart()) {
+                Ok(()) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+                Err(e) => self.update_error = Some(e),
+            }
+        }
         egui::Panel::top("update")
             .frame(egui::Frame::NONE.fill(ACTION).inner_margin(egui::Margin::symmetric(16, 8)))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(text).color(Color32::WHITE).strong());
-                    let button = egui::Button::new(RichText::new("Download update").color(ACTION).strong()).fill(Color32::WHITE);
-                    if ui.add(button).clicked() {
-                        self.update_error = crate::update::open(&url).err();
+                    if self.installing.is_some() {
+                        ui.spinner();
+                        ui.label(RichText::new("Downloading the update…").color(Color32::WHITE));
+                    } else {
+                        let button = egui::Button::new(RichText::new("Update now").color(ACTION).strong()).fill(Color32::WHITE);
+                        if ui.add(button).clicked() {
+                            self.update_error = None;
+                            self.installing = Some(crate::update::spawn_install(update.clone(), ctx.clone()));
+                        }
+                        let page = egui::Button::new(RichText::new("Release page").color(Color32::WHITE)).fill(ACTION);
+                        if ui.add(page).clicked() {
+                            self.update_error = crate::update::open(&url).err();
+                        }
                     }
                     if let Some(e) = &self.update_error {
                         ui.label(RichText::new(e).color(Color32::WHITE));
@@ -598,6 +619,7 @@ mod tests {
                 update: None,
                 updates: None,
                 update_error: None,
+                installing: None,
                 frames: 0,
             }
         }
