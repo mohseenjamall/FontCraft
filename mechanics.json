@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "values": [
+    {"name": "preview size min", "group": "preview", "value": 6, "unit": "px", "source": "dist/app.js size slider (asar evidence ev_0cffe4e6)"},
+    {"name": "preview size max", "group": "preview", "value": 180, "unit": "px", "source": "dist/app.js size slider"},
+    {"name": "preview size step", "group": "preview", "value": 2, "unit": "px", "source": "dist/app.js size slider"},
+    {"name": "preview size default", "group": "preview", "value": 42, "unit": "px", "source": "dist/app.js preview settings fontSize:42"},
+    {"name": "waterfall sizes", "group": "detail", "value": "72, 48, 24, 14", "unit": "px", "source": "dist/app.js waterfall component"},
+    {"name": "default sample rule", "group": "preview", "value": "first supported script of 16 (Latin first)", "source": "dist/talker.js script table"},
+    {"name": "header background", "group": "theme", "value": "#111111", "source": "dist/style.css --color-back-header"},
+    {"name": "sidebar background", "group": "theme", "value": "#181818", "source": "dist/style.css --color-back-side"},
+    {"name": "main background", "group": "theme", "value": "#FAFAFA", "source": "dist/style.css --color-back-main"},
+    {"name": "main text", "group": "theme", "value": "#222222", "source": "dist/style.css --color-text-main"},
+    {"name": "accent", "group": "theme", "value": "#5200EA", "source": "dist/style.css --color-action"},
+    {"name": "activated fonts registry key", "group": "sources", "value": "HKCU\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts", "source": "function 0x180001200 (fontsession.node registerFonts)"},
+    {"name": "activated font value name", "group": "sources", "value": "<name> (FontBase)", "source": "function 0x180001200 wsprintfW \"%s (FontBase)\\n\""},
+    {"name": "font change broadcast message", "group": "sources", "value": 29, "source": "function 0x180001200 PostMessageA(0xffff, 0x1d)"},
+    {"name": "list row height", "group": "layout", "value": "size*1.35+34", "unit": "px", "estimated": true}
+  ]
+}
