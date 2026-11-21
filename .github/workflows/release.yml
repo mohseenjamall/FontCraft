@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, asset: windows-x64.exe, bin: fontcraft.exe }
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, asset: linux-x64, bin: fontcraft }
+          - { os: macos-14, target: aarch64-apple-darwin, asset: macos-arm64, bin: fontcraft }
+          - { os: macos-13, target: x86_64-apple-darwin, asset: macos-x64, bin: fontcraft }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tag matches Cargo.toml version
+        shell: bash
+        run: |
+          cargo_v=$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -n1)
+          if [ "${GITHUB_REF_NAME}" != "v${cargo_v}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match Cargo.toml version v${cargo_v}" >&2
+            exit 1
+          fi
+          echo "VERSION=${cargo_v}" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev libgtk-3-dev
+      - name: Build release
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Name the binary
+        shell: bash
+        run: |
+          mkdir dist
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist/FontCraft-${VERSION}-${{ matrix.asset }}"
+      - name: Zip the Windows build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "dist/FontCraft-$env:VERSION-windows-x64.exe" -DestinationPath "dist/FontCraft-$env:VERSION-windows-x64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FontCraft-${{ matrix.asset }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums and release
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Lines are "<hex>  <file>" (two spaces), which update::expected_hash parses.
+          sha256sum FontCraft-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          gh release create "$TAG" FontCraft-* SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
