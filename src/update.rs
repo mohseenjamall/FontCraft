@@ -61,9 +61,10 @@ fn curl() -> Command {
 }
 
 /// What GitHub answered for `releases/latest`, as curl prints it ("302 https://…" or "404 ").
-/// shortcut: uses the curl.exe built into Windows 10 1803+; switch to an HTTP crate if older Windows matters.
+/// shortcut: uses the curl that ships with Windows 10 1803+, macOS and nearly all Linux; switch to an HTTP crate if it must work without curl.
 fn fetch() -> Option<String> {
-    let out = curl().args(["-s", "-o", "NUL", "--max-time", "10", "-w", "%{http_code} %{redirect_url}", LATEST_URL]).output().ok()?;
+    let null = if cfg!(windows) { "NUL" } else { "/dev/null" };
+    let out = curl().args(["-s", "-o", null, "--max-time", "10", "-w", "%{http_code} %{redirect_url}", LATEST_URL]).output().ok()?;
     Some(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
@@ -91,9 +92,24 @@ pub fn spawn_check(ctx: egui::Context) -> Receiver<Update> {
 
 const DOWNLOADS: &str = "https://github.com/mohseenjamall/FontCraft/releases/download/";
 
-/// The program file every release must attach, e.g. `FontCraft-1.2.0-windows-x64.exe`.
+/// The program file every release must attach for this OS, e.g. `FontCraft-1.2.0-windows-x64.exe`,
+/// `FontCraft-1.2.0-linux-x64`, `FontCraft-1.2.0-macos-arm64` / `-macos-x64`.
 fn asset_name(version: &str) -> String {
-    format!("FontCraft-{version}-windows-x64.exe")
+    let platform = if cfg!(windows) {
+        "windows-x64.exe"
+    } else if cfg!(target_os = "macos") {
+        if cfg!(target_arch = "aarch64") { "macos-arm64" } else { "macos-x64" }
+    } else {
+        "linux-x64"
+    };
+    format!("FontCraft-{version}-{platform}")
+}
+
+/// A downloaded file isn't executable, and `self_replace` copies from it.
+#[cfg(unix)]
+fn make_executable(path: &std::path::Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
 }
 
 /// The SHA-256 that `SHA256SUMS.txt` (lines of `<hex>  <file>`) lists for `file`.
@@ -135,6 +151,8 @@ pub fn install(u: &Update) -> Result<(), String> {
     if sha256_hex(&bytes) != want {
         return Err("the download doesn't match its checksum; nothing was changed".into());
     }
+    #[cfg(unix)]
+    make_executable(&exe).map_err(|e| format!("couldn't make the download runnable: {e}"))?;
     self_replace::self_replace(&exe).map_err(|e| format!("couldn't replace FontCraft (is it in a protected folder?): {e}"))
 }
 
@@ -159,7 +177,13 @@ pub fn open(url: &str) -> Result<(), String> {
     if !trusted(url) {
         return Err(format!("refused to open {url}"));
     }
-    let opener = if cfg!(windows) { "explorer" } else { "xdg-open" };
+    let opener = if cfg!(windows) {
+        "explorer"
+    } else if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
     Command::new(opener).arg(url).spawn().map(drop).map_err(|e| format!("couldn't open the download page: {e}"))
 }
 
@@ -230,10 +254,35 @@ mod tests {
     #[test]
     fn finds_the_programs_checksum_only() {
         let h = "d3808ce8710df2084c063da78e6a77c862c35c09bf1f66af6e470fe44428056f";
-        let sums = format!("{}  FontCraft-1.1.0-windows-x64.zip\n{h}  FontCraft-1.1.0-windows-x64.exe\n", "a".repeat(64));
-        assert_eq!(expected_hash(&sums, &asset_name("1.1.0")), Some(h.to_owned()));
+        let name = asset_name("1.1.0");
+        let sums = format!("{}  FontCraft-1.1.0-windows-x64.zip\n{h}  {name}\n", "a".repeat(64));
+        assert_eq!(expected_hash(&sums, &name), Some(h.to_owned()));
         assert_eq!(expected_hash(&sums, &asset_name("1.2.0")), None);
-        assert_eq!(expected_hash("short  FontCraft-1.1.0-windows-x64.exe", &asset_name("1.1.0")), None);
+        assert_eq!(expected_hash(&format!("short  {name}"), &name), None);
+    }
+
+    #[test]
+    fn asset_name_matches_this_os() {
+        #[cfg(windows)]
+        assert_eq!(asset_name("1.2.0"), "FontCraft-1.2.0-windows-x64.exe");
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        assert_eq!(asset_name("1.2.0"), "FontCraft-1.2.0-macos-arm64");
+        #[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
+        assert_eq!(asset_name("1.2.0"), "FontCraft-1.2.0-macos-x64");
+        #[cfg(not(any(windows, target_os = "macos")))]
+        assert_eq!(asset_name("1.2.0"), "FontCraft-1.2.0-linux-x64");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn make_executable_sets_the_execute_bits() {
+        use std::os::unix::fs::PermissionsExt;
+        let f = std::env::temp_dir().join(format!("fontcraft-exec-test-{}", std::process::id()));
+        std::fs::write(&f, b"x").unwrap();
+        make_executable(&f).unwrap();
+        let mode = std::fs::metadata(&f).unwrap().permissions().mode();
+        let _ = std::fs::remove_file(&f);
+        assert_ne!(mode & 0o111, 0);
     }
 
     #[test]
