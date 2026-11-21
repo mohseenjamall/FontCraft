@@ -2,7 +2,7 @@
 use std::path::PathBuf;
 
 fn dir() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("FontCraft"))
+    crate::platform::app_data_dir()
 }
 
 fn file() -> Option<PathBuf> {

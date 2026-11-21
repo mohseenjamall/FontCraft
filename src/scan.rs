@@ -107,14 +107,9 @@ fn name(face: &ttf_parser::Face, id: u16) -> Option<String> {
 
 /// Folders the system loads fonts from: (label, path).
 pub fn system_folders() -> Vec<(String, PathBuf)> {
-    let mut out = Vec::new();
-    if let Some(win) = std::env::var_os("WINDIR") {
-        out.push(("System".to_string(), PathBuf::from(win).join("Fonts")));
-    }
-    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
-        out.push(("User installed".to_string(), PathBuf::from(local).join(r"Microsoft\Windows\Fonts")));
-    }
-    out
+    let system = crate::platform::system_font_dirs().into_iter().map(|p| ("System".to_string(), p));
+    let user = crate::platform::user_fonts_dir().map(|p| ("User installed".to_string(), p));
+    system.chain(user).collect()
 }
 
 /// Font files FontBase turned on from anywhere on disk. Its native add-on (registerFonts,
@@ -145,6 +140,7 @@ pub fn fontbase_activated() -> Vec<PathBuf> {
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
     #[test]
     fn reads_names_from_a_system_font() {
         let (_, dir) = system_folders().into_iter().next().expect("windows fonts folder");

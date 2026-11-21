@@ -3,6 +3,7 @@ mod activate;
 mod app;
 mod disabled;
 mod fonts;
+mod platform;
 mod samples;
 mod scan;
 mod store;
