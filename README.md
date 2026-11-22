@@ -3,7 +3,7 @@
 A fast, native font browser for Windows, macOS and Linux. See every font on your computer, each previewed in its
 own typeface, with your own text and size, without a heavy web-based app.
 
-Version 1.1.0
+Version 1.2.0
 
 ## Features
 
