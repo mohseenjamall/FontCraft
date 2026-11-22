@@ -25,6 +25,7 @@ pub mod color {
     pub const COBALT_HOVER: Color32 = hex(0x24, 0x57, 0xD6);
     pub const COBALT_PRESSED: Color32 = hex(0x17, 0x3F, 0xA8);
     pub const DANGER: Color32 = hex(0xB4, 0x23, 0x18);
+    #[allow(dead_code)] // part of the token set; no success state in the UI yet
     pub const SUCCESS: Color32 = hex(0x2F, 0x7D, 0x4F);
 }
 
@@ -34,6 +35,7 @@ pub mod space {
     pub const M: f32 = 12.0;
     pub const L: f32 = 16.0;
     pub const XL: f32 = 24.0;
+    #[allow(dead_code)] // top of the spacing scale
     pub const XXL: f32 = 32.0;
 }
 
@@ -47,6 +49,7 @@ pub mod size {
     pub const META: f32 = 11.0;
     pub const SECONDARY: f32 = 12.0;
     pub const BODY: f32 = 13.0;
+    #[allow(dead_code)] // section title size, used by the next view
     pub const TITLE: f32 = 15.0;
     pub const DETAIL: f32 = 20.0;
 }
@@ -54,6 +57,7 @@ pub mod size {
 pub const HEADER_HEIGHT: f32 = 52.0;
 pub const ROW_HEIGHT: f32 = 32.0;
 
+#[cfg(test)] // only the contrast test measures colours
 fn luminance(c: Color32) -> f32 {
     let lin = |v: u8| {
         let s = v as f32 / 255.0;
@@ -63,6 +67,7 @@ fn luminance(c: Color32) -> f32 {
 }
 
 /// WCAG contrast ratio, 1.0 to 21.0, order-independent.
+#[cfg(test)]
 pub fn contrast(a: Color32, b: Color32) -> f32 {
     let (la, lb) = (luminance(a), luminance(b));
     (la.max(lb) + 0.05) / (la.min(lb) + 0.05)

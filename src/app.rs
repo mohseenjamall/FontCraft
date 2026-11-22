@@ -13,9 +13,6 @@ use crate::theme::{self, color};
 use crate::widgets;
 
 // Slider limits read from FontBase's style.css / app.js (see MECHANICS.md).
-const MAIN_BG: Color32 = Color32::from_rgb(0xFA, 0xFA, 0xFA);
-const TEXT_MAIN: Color32 = Color32::from_rgb(0x22, 0x22, 0x22);
-const ACTION: Color32 = Color32::from_rgb(0x52, 0x00, 0xEA);
 const SIZE_MIN: f32 = 6.0;
 const SIZE_MAX: f32 = 180.0;
 const SIZE_STEP: f64 = 2.0;
@@ -264,7 +261,7 @@ fn pick_font(ctx: &egui::Context, family: egui::FontFamily, sample: &str, size: 
     if ctx.fonts_mut(|f| f.has_glyphs(&own, sample)) {
         Drawn { font: own, color: ink, has_all: true }
     } else {
-        Drawn { font: FontId::proportional(size), color: Color32::from_gray(0xB8), has_all: false }
+        Drawn { font: FontId::proportional(size), color: color::INK_MUTED, has_all: false }
     }
 }
 
@@ -535,11 +532,12 @@ impl FontApp {
         let visible = self.visible();
         let row_h = self.size * 1.35 + 34.0;
         egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.fill(MAIN_BG).inner_margin(egui::Margin::symmetric(20, 8)))
+            .frame(egui::Frame::NONE.fill(color::PAPER).inner_margin(egui::Margin::symmetric(theme::space::XL as i8, 8)))
             .show(ui, |ui| {
                 if visible.is_empty() {
                     ui.centered_and_justified(|ui| {
-                        ui.label(if self.scan_done { "No fonts match." } else { "Looking for fonts…" });
+                        let text = if self.scan_done { "No fonts match." } else { "Looking for fonts…" };
+                        ui.label(RichText::new(text).size(theme::size::BODY).color(color::INK_MUTED));
                     });
                     return;
                 }
@@ -562,19 +560,23 @@ impl FontApp {
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), row_h), egui::Sense::click());
         let painter = ui.painter_at(rect);
         if selected || resp.hovered() {
-            painter.rect_filled(rect, 6.0, if selected { Color32::from_rgb(0xEC, 0xE6, 0xFD) } else { Color32::from_gray(0xF0) });
+            let inner = rect.shrink2(egui::vec2(0.0, 2.0));
+            if selected {
+                painter.rect(inner, theme::radius::CONTROL, color::SELECTED, egui::Stroke::new(1.0, color::CANVAS_LINE), egui::StrokeKind::Inside);
+            } else {
+                painter.rect_filled(inner, theme::radius::CONTROL, color::CANVAS_HOVER);
+            }
         }
-        let drawn = family.map(|f| pick_font(ui.ctx(), f, &sample, self.size, TEXT_MAIN));
+        let drawn = family.map(|f| pick_font(ui.ctx(), f, &sample, self.size, color::INK));
         let lacks = drawn.as_ref().is_some_and(|d| !d.has_all);
         let mut meta = format!("{name}   ·   {styles} style{}", if styles == 1 { "" } else { "s" });
         if lacks {
             meta.push_str("   ·   no glyphs for this text");
         }
-        painter.text(rect.left_top() + egui::vec2(8.0, 8.0), egui::Align2::LEFT_TOP, meta.clone(), FontId::proportional(12.0), Color32::from_gray(0x80));
+        painter.text(rect.left_top() + egui::vec2(8.0, 8.0), egui::Align2::LEFT_TOP, meta, FontId::proportional(theme::size::SECONDARY), color::INK_DIM);
         if on {
-            let pill = egui::Rect::from_min_size(rect.right_top() + egui::vec2(-44.0, 6.0), egui::vec2(34.0, 16.0));
-            painter.rect_filled(pill, 8.0, ACTION);
-            painter.text(pill.center(), egui::Align2::CENTER_CENTER, "ON", FontId::proportional(10.0), Color32::WHITE);
+            let status = egui::Rect::from_min_size(rect.right_top() + egui::vec2(-theme::space::M, 8.0), egui::vec2(0.0, 16.0));
+            widgets::status_dot(&painter, status);
         }
         let pos = rect.left_top() + egui::vec2(8.0, 28.0);
         match drawn {
@@ -582,7 +584,7 @@ impl FontApp {
                 painter.text(pos, egui::Align2::LEFT_TOP, sample, d.font, d.color);
             }
             None => {
-                painter.text(pos, egui::Align2::LEFT_TOP, sample, FontId::proportional(self.size), Color32::from_gray(0xD0));
+                painter.text(pos, egui::Align2::LEFT_TOP, sample, FontId::proportional(self.size), color::CANVAS_LINE);
             }
         }
         if resp.clicked() {
@@ -611,47 +613,53 @@ impl FontApp {
         egui::Panel::right("details")
             .default_size(420.0)
             .resizable(true)
-            .frame(egui::Frame::NONE.fill(Color32::WHITE).inner_margin(egui::Margin::same(16)))
+            .frame(egui::Frame::NONE.fill(color::CARD).inner_margin(egui::Margin::same(16)))
             .show(ui, |ui| {
-                ui.visuals_mut().override_text_color = Some(TEXT_MAIN);
+                ui.visuals_mut().override_text_color = Some(color::INK);
+                ui.visuals_mut().selection.bg_fill = color::SELECTED;
+                ui.visuals_mut().selection.stroke.color = color::INK;
                 ui.horizontal(|ui| {
-                    ui.heading(&name);
+                    ui.label(RichText::new(&name).size(theme::size::DETAIL).color(color::INK));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("×").on_hover_text("Close").clicked() {
+                        if widgets::paper_button(ui, "×").on_hover_text("Close").clicked() {
                             self.selected = None;
                         }
                     });
                 });
-                ui.label(RichText::new(faces[0].path.display().to_string()).size(11.0).color(Color32::GRAY));
+                ui.label(RichText::new(faces[0].path.display().to_string()).font(FontId::new(theme::size::META, theme::mono())).color(color::INK_MUTED));
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    let (text, fill, color) = match (can, on) {
-                        (false, _) => {
-                            (if cfg!(windows) { "System font: needs administrator" } else { "Locked" }, Color32::from_gray(0xEE), TEXT_MAIN)
-                        }
-                        (true, true) => ("Turn off", Color32::from_gray(0xEE), TEXT_MAIN),
-                        (true, false) => ("Turn on", ACTION, Color32::WHITE),
+                    let text = match (can, on) {
+                        (false, _) => if cfg!(windows) { "System font: needs administrator" } else { "Locked" },
+                        (true, true) => "Turn off",
+                        (true, false) => "Turn on",
                     };
-                    let resp = ui.add_enabled(can, egui::Button::new(RichText::new(text).color(color)).fill(fill));
-                    clicked = resp.on_disabled_hover_text(lock.unwrap_or_default()).clicked();
+                    // A locked font gets a plain label (a faded disabled button would fall under 4.5:1).
+                    if can {
+                        let resp = if on { widgets::paper_button(ui, text) } else { widgets::primary_button(ui, text) };
+                        clicked = resp.clicked();
+                    } else {
+                        ui.label(RichText::new(text).size(theme::size::SECONDARY).color(color::INK_DIM))
+                            .on_hover_text(lock.unwrap_or_default());
+                    }
                     if on && can {
-                        ui.label(RichText::new("On for all apps").size(12.0).color(ACTION));
+                        ui.label(RichText::new("On for all apps").size(theme::size::SECONDARY).color(color::COBALT));
                     } else if saved_off {
-                        ui.label(RichText::new("Off: its settings are saved").size(12.0).color(Color32::GRAY));
+                        ui.label(RichText::new("Off: its settings are saved").size(theme::size::SECONDARY).color(color::INK_MUTED));
                     }
                 });
                 if by_fontbase && can {
-                    ui.label(RichText::new("FontBase قد يعرض هذا الخط كمفعّل حتى تفتحه فيه").size(11.0).color(Color32::GRAY));
+                    ui.label(RichText::new("FontBase قد يعرض هذا الخط كمفعّل حتى تفتحه فيه").size(11.0).color(color::INK_MUTED));
                 }
                 if !shares.is_empty() && can {
                     ui.label(
                         RichText::new(format!("This file also holds: {} (they change together)", shares.join(", ")))
                             .size(11.0)
-                            .color(Color32::GRAY),
+                            .color(color::INK_MUTED),
                     );
                 }
                 if let Some(n) = &self.notice {
-                    let notice = egui::Label::new(RichText::new(n).size(12.0).color(Color32::from_rgb(0xD0, 0x00, 0x48)))
+                    let notice = egui::Label::new(RichText::new(n).size(12.0).color(color::DANGER))
                         .sense(egui::Sense::click());
                     if ui.add(notice).on_hover_text("Click to dismiss").clicked() {
                         self.notice = None;
@@ -662,19 +670,19 @@ impl FontApp {
                     for (k, face) in faces.iter().enumerate() {
                         let fam = self.loader.family(face);
                         let label = RichText::new(&face.style).size(22.0);
-                        let label = match fam { Some(f) => label.family(f), None => label.color(Color32::LIGHT_GRAY) };
+                        let label = match fam { Some(f) => label.family(f), None => label.color(color::CANVAS_LINE) };
                         if ui.selectable_label(self.selected_face == k, label).clicked() {
                             self.selected_face = k;
                         }
                     }
                     ui.add_space(16.0);
-                    ui.label(RichText::new("WATERFALL").size(11.0).color(Color32::GRAY));
+                    widgets::paper_section_label(ui, "Waterfall");
                     let face = &faces[self.selected_face.min(faces.len() - 1)];
                     let sample = self.sample(face);
                     if let Some(f) = self.loader.family(face) {
                         for size in WATERFALL {
-                            let d = pick_font(ui.ctx(), f.clone(), &sample, size, TEXT_MAIN);
-                            ui.label(RichText::new(format!("{size} px")).size(11.0).color(Color32::GRAY));
+                            let d = pick_font(ui.ctx(), f.clone(), &sample, size, color::INK);
+                            ui.label(RichText::new(format!("{size} px")).font(FontId::new(theme::size::META, theme::mono())).color(color::INK_MUTED));
                             ui.add(egui::Label::new(RichText::new(&sample).font(d.font).color(d.color)).wrap());
                         }
                     }

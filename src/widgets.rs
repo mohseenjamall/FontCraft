@@ -40,7 +40,18 @@ pub fn ghost_button(ui: &mut egui::Ui, label: &str) -> Response {
     )
 }
 
-/// Shared drawing for the two button kinds, so both keep the same metrics.
+/// The ghost button for the light canvas (details panel); muted text when the ui is disabled.
+pub fn paper_button(ui: &mut egui::Ui, label: &str) -> Response {
+    let text = if ui.is_enabled() { color::INK } else { color::INK_MUTED };
+    button(ui, label, Color32::TRANSPARENT, color::CANVAS_HOVER, color::SELECTED, Stroke::new(1.0, color::CANVAS_LINE), text)
+}
+
+/// Small heading above a group on the light canvas (the waterfall list).
+pub fn paper_section_label(ui: &mut egui::Ui, text: &str) {
+    ui.label(RichText::new(text).font(FontId::new(size::BODY, theme::medium())).color(color::INK_DIM));
+}
+
+/// Shared drawing for the button kinds, so all keep the same metrics.
 fn button(
     ui: &mut egui::Ui,
     label: &str,
@@ -114,12 +125,11 @@ fn paint_ticks(painter: &egui::Painter, track: egui::Rect, ruler: egui::Rect, ra
     }
 }
 
-/// An 8 px accent dot with "On" in 11 px mono, right-aligned in the rect.
-#[allow(dead_code)] // used by the font rows in the next task
+/// An 8 px accent dot with "On" in 11 px text, right-aligned in the rect.
 pub fn status_dot(painter: &egui::Painter, rect: egui::Rect) {
-    let galley = painter.layout_no_wrap("On".to_owned(), FontId::new(size::META, theme::mono()), color::INK_MUTED);
+    let galley = painter.layout_no_wrap("On".to_owned(), FontId::proportional(size::META), color::INK_DIM);
     let text_pos = egui::pos2(rect.right() - galley.size().x, rect.center().y - galley.size().y / 2.0);
     let dot = egui::pos2(text_pos.x - space::XS - 4.0, rect.center().y);
     painter.circle_filled(dot, 4.0, color::COBALT);
-    painter.galley(text_pos, galley, color::INK_MUTED);
+    painter.galley(text_pos, galley, color::INK_DIM);
 }
