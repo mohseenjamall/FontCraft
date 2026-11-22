@@ -13,6 +13,7 @@ mod support;
 #[allow(dead_code)] // tokens are used by later tasks
 mod theme;
 mod update;
+mod widgets;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};

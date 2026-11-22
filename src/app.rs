@@ -9,12 +9,11 @@ use eframe::egui::{self, Color32, FontId, RichText};
 use crate::activate;
 use crate::fonts::FontLoader;
 use crate::scan::{self, Face};
+use crate::theme::{self, color};
+use crate::widgets;
 
-// Theme colours and slider limits read from FontBase's style.css / app.js (see MECHANICS.md).
-const HEADER_BG: Color32 = Color32::from_rgb(0x11, 0x11, 0x11);
-const SIDE_BG: Color32 = Color32::from_rgb(0x18, 0x18, 0x18);
+// Slider limits read from FontBase's style.css / app.js (see MECHANICS.md).
 const MAIN_BG: Color32 = Color32::from_rgb(0xFA, 0xFA, 0xFA);
-const TEXT_LIGHT: Color32 = Color32::from_rgb(0xE7, 0xE7, 0xE7);
 const TEXT_MAIN: Color32 = Color32::from_rgb(0x22, 0x22, 0x22);
 const ACTION: Color32 = Color32::from_rgb(0x52, 0x00, 0xEA);
 const SIZE_MIN: f32 = 6.0;
@@ -273,6 +272,40 @@ fn folder_label(p: &std::path::Path) -> String {
     p.file_name().map_or_else(|| p.display().to_string(), |n| n.to_string_lossy().into_owned())
 }
 
+/// A sidebar row: label left, count right in mono, 32 high with a quiet selection.
+fn source_row(ui: &mut egui::Ui, label: &str, count: usize, selected: bool) -> egui::Response {
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), theme::ROW_HEIGHT), egui::Sense::click());
+    let painter = ui.painter();
+    if selected {
+        painter.rect(
+            rect,
+            theme::radius::CONTROL,
+            color::CHROME_RAISED,
+            egui::Stroke::new(1.0, color::CHROME_LINE),
+            egui::StrokeKind::Inside,
+        );
+    } else if response.hovered() {
+        painter.rect_filled(rect, theme::radius::CONTROL, color::CHROME_HOVER);
+    }
+    let text_color = if selected { color::CHROME_TEXT } else { color::CHROME_TEXT_DIM };
+    painter.text(
+        egui::pos2(rect.left() + theme::space::S, rect.center().y),
+        egui::Align2::LEFT_CENTER,
+        label,
+        egui::FontId::proportional(theme::size::BODY),
+        text_color,
+    );
+    painter.text(
+        egui::pos2(rect.right() - theme::space::S, rect.center().y),
+        egui::Align2::RIGHT_CENTER,
+        count.to_string(),
+        egui::FontId::new(theme::size::META, theme::mono()),
+        color::CHROME_TEXT_MUTED,
+    );
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
 /// Background scans feeding one stream of faces; `pending` counts scans still running.
 struct Scans {
     tx: Sender<Face>,
@@ -358,17 +391,24 @@ impl FontApp {
             }
         }
         egui::Panel::top("update")
-            .frame(egui::Frame::NONE.fill(ACTION).inner_margin(egui::Margin::symmetric(16, 8)))
+            .frame(egui::Frame::NONE.fill(color::COBALT).inner_margin(egui::Margin::symmetric(16, 8)))
             .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(text).color(Color32::WHITE).strong());
+                ui.horizontal_centered(|ui| {
+                    ui.label(RichText::new(text).color(Color32::WHITE));
                     if self.installing.is_some() {
                         ui.spinner();
                         ui.label(RichText::new("Downloading the update…").color(Color32::WHITE));
                     } else {
                         let in_place = crate::update::installs_in_place();
                         let label = if in_place { "Update now" } else { "Download update" };
-                        let button = egui::Button::new(RichText::new(label).color(ACTION).strong()).fill(Color32::WHITE);
+                        let button = egui::Button::new(
+                            RichText::new(label)
+                                .font(FontId::new(theme::size::BODY, theme::medium()))
+                                .color(color::COBALT),
+                        )
+                        .fill(Color32::WHITE)
+                        .corner_radius(theme::radius::CONTROL)
+                        .min_size(egui::vec2(0.0, 28.0));
                         if ui.add(button).clicked() {
                             self.update_error = None;
                             if in_place {
@@ -378,7 +418,11 @@ impl FontApp {
                                 self.update_error = crate::update::open(&crate::update::download_url(&update)).err();
                             }
                         }
-                        let page = egui::Button::new(RichText::new("Release page").color(Color32::WHITE)).fill(ACTION);
+                        let page = egui::Button::new(RichText::new("Release page").color(Color32::WHITE))
+                            .fill(Color32::TRANSPARENT)
+                            .stroke(egui::Stroke::new(1.0, Color32::WHITE))
+                            .corner_radius(theme::radius::CONTROL)
+                            .min_size(egui::vec2(0.0, 28.0));
                         if ui.add(page).clicked() {
                             self.update_error = crate::update::open(&url).err();
                         }
@@ -392,21 +436,30 @@ impl FontApp {
 
     fn header(&mut self, ui: &mut egui::Ui) {
         egui::Panel::top("header")
-            .frame(egui::Frame::NONE.fill(HEADER_BG).inner_margin(egui::Margin::symmetric(16, 10)))
+            .exact_size(theme::HEADER_HEIGHT)
+            .frame(egui::Frame::NONE.fill(color::HEADER).inner_margin(egui::Margin::symmetric(16, 8)))
             .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    *ui.visuals_mut() = crate::theme::chrome_visuals();
+                ui.horizontal_centered(|ui| {
+                    *ui.visuals_mut() = theme::chrome_visuals();
                     let width = ui.available_width() * 0.5;
-                    ui.add(egui::TextEdit::singleline(&mut self.text).hint_text("Type something to preview…").desired_width(width));
-                    ui.add_space(12.0);
-                    ui.label("Size");
                     ui.add(
-                        egui::Slider::new(&mut self.size, SIZE_MIN..=SIZE_MAX)
-                            .step_by(SIZE_STEP)
-                            .suffix(" px"),
+                        egui::TextEdit::singleline(&mut self.text)
+                            .hint_text("Type something to preview…")
+                            .desired_width(width)
+                            .min_size(egui::vec2(0.0, 28.0))
+                            .background_color(color::CHROME_RAISED),
                     );
-                    ui.add_space(12.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("Search fonts").desired_width(180.0));
+                    ui.add_space(theme::space::M);
+                    ui.label(RichText::new("Size").color(color::CHROME_TEXT_DIM));
+                    widgets::ruler_slider(ui, &mut self.size, SIZE_MIN..=SIZE_MAX, SIZE_STEP);
+                    ui.add_space(theme::space::M);
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.search)
+                            .hint_text("Search fonts")
+                            .desired_width(180.0)
+                            .min_size(egui::vec2(0.0, 28.0))
+                            .background_color(color::CHROME_RAISED),
+                    );
                 });
             });
     }
@@ -414,24 +467,25 @@ impl FontApp {
     fn sidebar(&mut self, ui: &mut egui::Ui) {
         egui::Panel::left("sources")
             .exact_size(220.0)
-            .frame(egui::Frame::NONE.fill(SIDE_BG).inner_margin(egui::Margin::symmetric(12, 14)))
+            .frame(egui::Frame::NONE.fill(color::SIDEBAR).inner_margin(egui::Margin::same(16)))
             .show(ui, |ui| {
-                *ui.visuals_mut() = crate::theme::chrome_visuals();
-                ui.label(RichText::new("FONTS").size(11.0).color(Color32::GRAY));
-                ui.add_space(6.0);
-                let all = format!("All fonts  {}", self.families.len());
-                if ui.selectable_label(self.source.is_none(), all).clicked() {
-                    self.source = None;
-                }
-                for i in 0..self.sources.len() {
-                    let count = self.families.iter().filter(|f| f.faces.iter().any(|x| x.source == i)).count();
-                    let label = format!("{}  {}", self.sources[i].0, count);
-                    if ui.selectable_label(self.source == Some(i), label).clicked() {
-                        self.source = Some(i);
+                *ui.visuals_mut() = theme::chrome_visuals();
+                widgets::section_label(ui, "Fonts");
+                ui.add_space(theme::space::S);
+                ui.scope(|ui| {
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    if source_row(ui, "All fonts", self.families.len(), self.source.is_none()).clicked() {
+                        self.source = None;
                     }
-                }
-                ui.add_space(12.0);
-                if ui.add(egui::Button::new(RichText::new("+ Add folder").color(Color32::WHITE)).fill(ACTION)).clicked()
+                    for i in 0..self.sources.len() {
+                        let count = self.families.iter().filter(|f| f.faces.iter().any(|x| x.source == i)).count();
+                        if source_row(ui, &self.sources[i].0, count, self.source == Some(i)).clicked() {
+                            self.source = Some(i);
+                        }
+                    }
+                });
+                ui.add_space(theme::space::M);
+                if widgets::primary_button(ui, "Add folder").clicked()
                     && let Some(dir) = rfd::FileDialog::new().pick_folder()
                 {
                     self.add_folder(dir);
@@ -439,36 +493,41 @@ impl FontApp {
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                     // First in a bottom-up layout = lowest on screen.
                     self.support_card(ui);
-                    ui.add_space(8.0);
+                    ui.add_space(theme::space::S);
                     let status = if self.scan_done {
                         format!("{} styles", self.faces.len())
                     } else {
                         format!("Scanning… {} styles", self.faces.len())
                     };
-                    ui.label(RichText::new(status).size(11.0).color(Color32::GRAY));
+                    ui.label(RichText::new(status).font(FontId::new(theme::size::META, theme::mono())).color(color::CHROME_TEXT_MUTED));
                 });
             });
     }
 
     /// Small card at the bottom of the side panel: picture, thanks line and the coffee link.
     fn support_card(&mut self, ui: &mut egui::Ui) {
-        // Fixed height (56px picture + margins): the sidebar's bottom-up layout would otherwise stretch the frame.
-        let size = egui::vec2(ui.available_width(), 72.0);
+        // Fixed height (48px picture + margins): the sidebar's bottom-up layout would otherwise stretch the frame.
+        let size = egui::vec2(ui.available_width(), 64.0);
         ui.allocate_ui_with_layout(size, egui::Layout::top_down(egui::Align::LEFT), |ui| {
-            egui::Frame::NONE.fill(Color32::from_rgb(0x22, 0x22, 0x22)).corner_radius(8.0).inner_margin(8.0).show(ui, |ui| {
-                ui.horizontal(|ui| {
-                if let Some(art) = &self.art {
-                    ui.add(egui::Image::new((art.id(), egui::vec2(56.0, 56.0))).corner_radius(8.0));
-                }
-                ui.vertical(|ui| {
-                    ui.label(RichText::new("Support FontCraft").size(12.0).color(TEXT_LIGHT));
-                    let coffee = egui::Button::new(RichText::new("Buy me a coffee").size(12.0).color(Color32::WHITE)).fill(ACTION);
-                    if ui.add(coffee).clicked() {
-                        self.notice = crate::support::open_support().err();
-                    }
+            egui::Frame::NONE
+                .fill(color::CHROME_RAISED)
+                .corner_radius(theme::radius::CARD)
+                .inner_margin(8.0)
+                .show(ui, |ui| {
+                    ui.horizontal_centered(|ui| {
+                        if let Some(art) = &self.art {
+                            ui.add(egui::Image::new((art.id(), egui::vec2(48.0, 48.0))).corner_radius(4.0));
+                        }
+                        ui.add_space(theme::space::XS);
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new("Support FontCraft").size(theme::size::SECONDARY).color(color::CHROME_TEXT));
+                            ui.add_space(2.0);
+                            if widgets::ghost_button(ui, "Buy me a coffee").clicked() {
+                                self.notice = crate::support::open_support().err();
+                            }
+                        });
+                    });
                 });
-                });
-            });
         });
     }
 
