@@ -1,0 +1,17 @@
+name: p12 debug
+on: workflow_dispatch
+jobs:
+  d:
+    runs-on: macos-latest
+    steps:
+      - env:
+          C: ${{ secrets.MACOS_CERTIFICATE }}
+          P: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          printf '%s' "$C" | base64 --decode > c.p12
+          echo "p12 bytes: $(wc -c < c.p12)  sha256: $(shasum -a 256 c.p12 | cut -c1-16)"
+          echo "password length: ${#P}"
+          openssl version
+          openssl pkcs12 -in c.p12 -passin env:P -noout && echo "runner openssl: password OK" || echo "runner openssl: password FAIL"
+          security create-keychain -p tmp t.keychain-db
+          security import c.p12 -k t.keychain-db -P "$P" -T /usr/bin/codesign && echo "security import OK" || echo "security import FAIL"
