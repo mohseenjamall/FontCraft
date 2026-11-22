@@ -4,19 +4,25 @@ const releaseUrl = 'https://github.com/mohseenjamall/FontCraft/releases/tag/v1.1
 ---
 
 <section class="section" id="get-it">
-  <div class="section-bar"><div class="container section-bar-inner"><span>04 / Get it</span><span>Free · Windows now</span></div></div>
+  <div class="section-bar"><div class="container section-bar-inner"><span>04 / Get it</span><span>Free · Windows, macOS, Linux</span></div></div>
   <div class="container">
     <div class="section-head">
       <h2 data-reveal>Download FontCraft <span data-ver>1.1.0</span></h2>
-      <p class="lede" data-reveal>Windows, 64-bit. Free. No account, no sign-in.</p>
+      <p class="lede" data-reveal>Windows 64-bit, macOS (Apple Silicon and Intel) and Linux x64. Free. No account, no sign-in.</p>
     </div>
 
     <div class="get-grid">
       <div class="get-main" data-reveal>
-        <p class="meta">Windows / available now</p>
+        <p class="meta">Your system is picked for you</p>
         <a class="btn btn-primary get-download" href={releasesUrl} data-download target="_blank" rel="noopener noreferrer">
-          Download<span data-os> for Windows</span> <span aria-hidden="true">&darr;</span>
+          Download<span data-os></span> <span aria-hidden="true">&darr;</span>
         </a>
+        <p class="meta get-all-label">Other systems</p>
+        <ul class="get-all">
+          <li><a class="btn btn-secondary" href={releasesUrl} data-dl-os="windows">Windows <span aria-hidden="true">&darr;</span></a></li>
+          <li><a class="btn btn-secondary" href={releasesUrl} data-dl-os="mac">macOS <span aria-hidden="true">&darr;</span></a></li>
+          <li><a class="btn btn-secondary" href={releasesUrl} data-dl-os="linux">Linux <span aria-hidden="true">&darr;</span></a></li>
+        </ul>
         <p class="get-note">
           The release contains:
         </p>
@@ -68,6 +74,19 @@ const releaseUrl = 'https://github.com/mohseenjamall/FontCraft/releases/tag/v1.1
 
   .get-download {
     margin-top: 18px;
+  }
+
+  .get-all-label {
+    margin-top: 28px;
+  }
+
+  .get-all {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
   }
 
   .get-note {

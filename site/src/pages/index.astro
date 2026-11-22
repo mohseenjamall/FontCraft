@@ -63,6 +63,12 @@ const description =
       }
     });
 
+    // The "other systems" row offers every build the release really has.
+    document.querySelectorAll('a[data-dl-os]').forEach((a) => {
+      const found = pickAsset(release.assets, a.getAttribute('data-dl-os'));
+      a.setAttribute('href', found ? found.url : release.url);
+    });
+
     // Flip a platform row to "Available now" only when its asset exists.
     const has = { mac: !!pickAsset(release.assets, 'mac'), linux: !!pickAsset(release.assets, 'linux') };
     document.querySelectorAll('[data-platform]').forEach((li) => {
