@@ -1,5 +1,8 @@
 name: p12 debug
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/p12-debug.yml']
 jobs:
   d:
     runs-on: macos-latest
