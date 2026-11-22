@@ -1,0 +1,31 @@
+name: macOS test build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [mac-linux-support]
+
+jobs:
+  build:
+    runs-on: macos-14
+    strategy:
+      matrix:
+        include:
+          - { target: aarch64-apple-darwin, name: FontCraft-macos-arm64 }
+          - { target: x86_64-apple-darwin, name: FontCraft-macos-x64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+      - run: |
+          mkdir out
+          cp target/${{ matrix.target }}/release/fontcraft out/${{ matrix.name }}
+          chmod +x out/${{ matrix.name }}
+          tar -C out -czf ${{ matrix.name }}.tar.gz ${{ matrix.name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}.tar.gz
