@@ -10,6 +10,8 @@ mod samples;
 mod scan;
 mod store;
 mod support;
+#[allow(dead_code)] // tokens are used by later tasks
+mod theme;
 mod update;
 
 use std::path::PathBuf;
