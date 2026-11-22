@@ -683,10 +683,12 @@ mod tests {
         assert_eq!(fam.files(), vec![PathBuf::from("a.ttf"), PathBuf::from("b.ttc")]);
     }
 
+    #[cfg(windows)]
     fn env_path(var: &str, rest: &str) -> PathBuf {
         PathBuf::from(std::env::var_os(var).unwrap()).join(rest)
     }
 
+    #[cfg(windows)]
     #[test]
     fn can_toggle_false_for_built_in_sources() {
         let app = FontApp::for_test(3, vec![sourced(&env_path("WINDIR", r"Fonts\arial.ttf"), "X", 0)]);
@@ -699,6 +701,7 @@ mod tests {
         assert!(app.can_toggle(&app.families[0]));
     }
 
+    #[cfg(windows)]
     #[test]
     fn can_toggle_for_the_four_font_sources() {
         let faces = vec![

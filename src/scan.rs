@@ -66,7 +66,7 @@ fn collect_skipping(dir: &Path, source: usize, out: &mut Vec<(usize, PathBuf)>, 
 
 /// Recursive walk; `seen` holds canonical dirs so symlink loops end instead of recursing forever.
 fn walk(dir: &Path, source: usize, out: &mut Vec<(usize, PathBuf)>, seen: &mut HashSet<PathBuf>, skip: &Path) {
-    let Ok(real) = std::fs::canonicalize(dir) else { return };
+    let real = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
     if !seen.insert(real) {
         return;
     }

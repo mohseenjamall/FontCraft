@@ -54,6 +54,10 @@ Run it:
   the app and choose **Open** once.
 - **Linux:** `target/release/fontcraft`
 
+A downloaded Linux or macOS release binary needs `chmod +x FontCraft-*` first. On macOS it is a bare
+binary you run from Terminal; the first time, run `xattr -d com.apple.quarantine FontCraft-*` (or
+right-click it and choose Open in Finder).
+
 Check the window without opening it in front of you: `fontcraft --screenshot shot.png`
 saves a picture of the window after it has loaded, then closes.
 

@@ -149,6 +149,9 @@ fn turn_off_with(user_fonts: &Path, links: &Path, conf: &Path, paths: &[PathBuf]
 /// A path fontconfig would read back as exactly this file.
 fn check_rule_path(path: &Path) -> Result<(), String> {
     let text = path.to_str().ok_or_else(|| format!("{}: its name isn't valid UTF-8, so it can't be turned off", path.display()))?;
+    if let Some(c) = text.chars().find(|c| (*c as u32) < 0x20) {
+        return Err(format!("{}: can't be turned off because its path contains a control character (U+{:04X}); rename it first", path.display(), c as u32));
+    }
     match text.chars().find(|c| GLOB_CHARS.contains(c)) {
         Some(c) => Err(format!("{}: can't be turned off because its path contains '{c}'; rename it first", path.display())),
         None => Ok(()),
@@ -360,6 +363,15 @@ mod tests {
         assert!(text.starts_with("<?xml version=\"1.0\"?>\n<!DOCTYPE fontconfig SYSTEM \"urn:fontconfig:fonts.dtd\">\n"));
         assert_eq!(parse_reject_conf(&text), paths);
         assert!(!t.0.join("conf.d").join("99-fontcraft.conf.tmp").exists(), "temp file renamed away");
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn turn_off_refuses_control_characters() {
+        let t = Tmp::new("ctrl");
+        let e = t.off(&[t.fonts().join("ab.ttf")]).unwrap_err();
+        assert!(e.contains("control character"), "{e}");
+        assert!(!t.conf().exists(), "conf untouched");
     }
 
     #[cfg(not(target_os = "macos"))]

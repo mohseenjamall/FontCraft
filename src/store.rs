@@ -1,4 +1,4 @@
-﻿//! Remembers the folders the person added, one path per line, in %APPDATA%\FontCraft.
+﻿//! Remembers the folders the person added, one path per line, in the per-OS folder from `platform::app_data_dir` (%APPDATA%\FontCraft on Windows).
 use std::path::PathBuf;
 
 fn dir() -> Option<PathBuf> {

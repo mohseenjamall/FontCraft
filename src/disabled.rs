@@ -101,6 +101,7 @@ impl Saved {
     }
 
     /// Entries whose data points at `path`, compared the way Windows compares paths.
+    #[cfg_attr(not(windows), allow(dead_code))] // only the Windows activator looks entries up
     pub fn for_path(&self, path: &Path) -> Vec<Entry> {
         let want = crate::activate::norm(path);
         self.entries.iter().filter(|e| e.path().is_some_and(|p| crate::activate::norm(&p) == want)).cloned().collect()
@@ -159,6 +160,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(f.parent().unwrap());
     }
 
+    #[cfg(windows)]
     #[test]
     fn for_path_matches_case_insensitively_and_resolves_relative_names() {
         let mut s = Saved::default();

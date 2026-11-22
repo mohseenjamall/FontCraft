@@ -99,8 +99,10 @@ fn asset_name(version: &str) -> String {
         "windows-x64.exe"
     } else if cfg!(target_os = "macos") {
         if cfg!(target_arch = "aarch64") { "macos-arm64" } else { "macos-x64" }
-    } else {
+    } else if cfg!(target_arch = "x86_64") {
         "linux-x64"
+    } else {
+        "linux-arm64" // no such asset is published, so install stops at the missing checksum
     };
     format!("FontCraft-{version}-{platform}")
 }
@@ -139,8 +141,25 @@ fn download(url: &str, to: &std::path::Path) -> Result<(), String> {
 /// place of the running program. The new version runs from the next start (see `restart`).
 pub fn install(u: &Update) -> Result<(), String> {
     version(&u.version).ok_or_else(|| format!("bad version {}", u.version))?;
-    let dir = std::env::temp_dir().join(format!("fontcraft-update-{}", u.version));
-    std::fs::create_dir_all(&dir).map_err(|e| format!("couldn't make a download folder: {e}"))?;
+    let dir = private_temp_dir().map_err(|e| format!("couldn't make a download folder: {e}"))?;
+    let result = install_in(u, &dir);
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
+
+/// A new, empty folder only this user can open; fails if the name is already taken (no reuse of a planted folder).
+fn private_temp_dir() -> std::io::Result<std::path::PathBuf> {
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+    let dir = std::env::temp_dir().join(format!("fontcraft-update-{}-{nanos}", std::process::id()));
+    let mut b = std::fs::DirBuilder::new();
+    b.recursive(false);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
+    b.create(&dir)?;
+    Ok(dir)
+}
+
+fn install_in(u: &Update, dir: &std::path::Path) -> Result<(), String> {
     let base = format!("{DOWNLOADS}v{}/", u.version);
     let (exe, sums) = (dir.join(asset_name(&u.version)), dir.join("SHA256SUMS.txt"));
     download(&format!("{base}SHA256SUMS.txt"), &sums)?;
@@ -269,8 +288,25 @@ mod tests {
         assert_eq!(asset_name("1.2.0"), "FontCraft-1.2.0-macos-arm64");
         #[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
         assert_eq!(asset_name("1.2.0"), "FontCraft-1.2.0-macos-x64");
-        #[cfg(not(any(windows, target_os = "macos")))]
+        #[cfg(all(not(any(windows, target_os = "macos")), target_arch = "x86_64"))]
         assert_eq!(asset_name("1.2.0"), "FontCraft-1.2.0-linux-x64");
+        #[cfg(all(not(any(windows, target_os = "macos")), not(target_arch = "x86_64")))]
+        assert_eq!(asset_name("1.2.0"), "FontCraft-1.2.0-linux-arm64");
+    }
+
+    #[test]
+    fn private_temp_dir_is_fresh_each_time() {
+        let (a, b) = (private_temp_dir().unwrap(), private_temp_dir().unwrap());
+        let (a_ok, b_ok) = (a.is_dir(), b.is_dir());
+        #[cfg(unix)]
+        let mode = {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::metadata(&a).unwrap().permissions().mode() & 0o777
+        };
+        let _ = (std::fs::remove_dir_all(&a), std::fs::remove_dir_all(&b));
+        assert!(a_ok && b_ok && a != b);
+        #[cfg(unix)]
+        assert_eq!(mode, 0o700);
     }
 
     #[cfg(unix)]

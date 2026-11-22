@@ -23,7 +23,7 @@ pub fn app_data_dir() -> Option<PathBuf> {
     if cfg!(windows) {
         env_path("APPDATA").map(|d| d.join("FontCraft"))
     } else if cfg!(target_os = "macos") {
-        env_path("HOME").map(|h| h.join("Library/Application Support/FontCraft"))
+        linux_dir(env_path("HOME").as_deref(), None, "Library/Application Support/FontCraft")
     } else {
         xdg("XDG_CONFIG_HOME", ".config").map(|d| d.join("FontCraft"))
     }
@@ -34,7 +34,7 @@ pub fn user_fonts_dir() -> Option<PathBuf> {
     if cfg!(windows) {
         env_path("LOCALAPPDATA").map(|d| d.join(r"Microsoft\Windows\Fonts"))
     } else if cfg!(target_os = "macos") {
-        env_path("HOME").map(|h| h.join("Library/Fonts"))
+        linux_dir(env_path("HOME").as_deref(), None, "Library/Fonts")
     } else {
         xdg("XDG_DATA_HOME", ".local/share").map(|d| d.join("fonts"))
     }
@@ -97,6 +97,13 @@ mod tests {
     fn linux_dir_ignores_relative_home() {
         assert_eq!(linux_dir(Some(Path::new("rel")), None, ".config"), None);
         assert_eq!(linux_dir(Some(Path::new("rel")), Some(Path::new("x")), ".config"), None);
+    }
+
+    #[test]
+    fn macos_style_dirs_reject_a_relative_home() {
+        assert_eq!(linux_dir(Some(Path::new("rel")), None, "Library/Fonts"), None);
+        let h = abs("home");
+        assert_eq!(linux_dir(Some(&h), None, "Library/Fonts"), Some(h.join("Library/Fonts")));
     }
 
     #[test]
