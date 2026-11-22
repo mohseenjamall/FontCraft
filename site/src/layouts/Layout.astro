@@ -1,0 +1,149 @@
+---
+import '@fontsource-variable/fraunces/full.css';
+import '@fontsource-variable/archivo';
+import '@fontsource/ibm-plex-mono/latin-400.css';
+import '@fontsource/ibm-plex-mono/latin-500.css';
+import '@fontsource/noto-naskh-arabic/arabic-400.css';
+import '../styles/global.css';
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" data-on-hero>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#1a4ac4" />
+    <link rel="icon" type="image/png" href={`${import.meta.env.BASE_URL}/favicon.png`} />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="author" content="Blaxk Development" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header" id="top">
+      <div class="container header-inner">
+        <a class="wordmark" href="#top" aria-label="FontCraft, back to top">
+          FontCraft<span aria-hidden="true">.</span>
+        </a>
+        <nav aria-label="Sections">
+          <a href="#highlights">Highlights</a>
+          <a href="#compare">Compare</a>
+          <a href="#get-it">Get it</a>
+        </nav>
+      </div>
+    </header>
+    <main id="main">
+      <slot />
+    </main>
+    <slot name="footer" />
+  <script>
+    // The header borrows the hero's cobalt while the hero is behind it, then returns to the dark theme.
+    const hero = document.querySelector('.hero');
+    const header = document.querySelector('.site-header');
+
+    if (hero && header) {
+      const update = () => {
+        const behind = hero.getBoundingClientRect().bottom > header.offsetHeight;
+        document.documentElement.toggleAttribute('data-on-hero', behind);
+      };
+      update();
+      window.addEventListener('scroll', update, { passive: true });
+      window.addEventListener('resize', update);
+    } else {
+      document.documentElement.removeAttribute('data-on-hero');
+    }
+  </script>
+  </body>
+</html>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+    transition: background-color 0.25s ease, border-color 0.25s ease;
+  }
+
+  /* Over the hero the header is the same cobalt surface, so there is no dark bar against the blue. */
+  :global(html[data-on-hero]) .site-header {
+    background: var(--cobalt);
+    border-bottom-color: rgb(255 255 255 / 0.28);
+  }
+
+  :global(html[data-on-hero]) .wordmark {
+    color: #fff;
+  }
+
+  :global(html[data-on-hero]) .wordmark span {
+    color: #b9c9ff;
+  }
+
+  :global(html[data-on-hero]) nav a {
+    color: rgb(255 255 255 / 0.85);
+  }
+
+  :global(html[data-on-hero]) nav a:hover {
+    color: #fff;
+    border-bottom-color: #fff;
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    min-height: 64px;
+  }
+
+  .wordmark {
+    font-family: var(--font-display);
+    font-size: clamp(1.2rem, 2.4vw, 1.45rem);
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+    font-variation-settings: 'opsz' 40, 'SOFT' 40, 'WONK' 1;
+  }
+
+  .wordmark span {
+    color: var(--accent);
+  }
+
+  nav {
+    display: flex;
+    align-items: center;
+    gap: clamp(12px, 2.4vw, 28px);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: 0.02em;
+  }
+
+  nav a {
+    padding-block: 8px;
+    color: var(--ink-dim);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: color 140ms ease, border-color 140ms ease;
+  }
+
+  nav a:hover {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+
+  @media (max-width: 380px) {
+    nav {
+      gap: 10px;
+      font-size: 9px;
+    }
+  }
+</style>

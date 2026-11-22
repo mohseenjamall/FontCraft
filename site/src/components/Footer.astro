@@ -1,0 +1,116 @@
+---
+const repoUrl = 'https://github.com/mohseenjamall/FontCraft';
+---
+
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <a class="wordmark" href="#top">FontCraft<span aria-hidden="true">.</span></a>
+      <p>Free. Still in active development.</p>
+      <p class="credit">Made by <strong>Blaxk Development</strong></p>
+    </div>
+
+    <nav aria-label="Project links">
+      <a href={repoUrl} target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href={`${repoUrl}/blob/main/README.md`} target="_blank" rel="noopener noreferrer">README</a>
+      <a href={`${repoUrl}/blob/main/EVALUATION.md`} target="_blank" rel="noopener noreferrer">Speed test</a>
+      <a href="https://buymeacoffee.com/mohseenjamalll" target="_blank" rel="noopener noreferrer">Support</a>
+    </nav>
+
+    <p class="footer-meta">Built with Rust and egui. Version <span data-ver>1.1.0</span>.</p>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    padding-block: clamp(2.5rem, 5vw, 4rem);
+    border-top: 1px solid var(--line);
+  }
+
+  .footer-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .credit {
+    margin-top: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    letter-spacing: var(--tr-mono);
+    color: var(--ink-dim);
+  }
+
+  .credit strong {
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .wordmark {
+    display: inline-block;
+    font-family: var(--font-display);
+    font-size: 1.45rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+    font-variation-settings: 'opsz' 40, 'SOFT' 40, 'WONK' 1;
+  }
+
+  .wordmark span {
+    color: var(--accent);
+  }
+
+  .footer-brand p {
+    max-width: 40ch;
+    margin-top: 12px;
+    color: var(--ink-dim);
+  }
+
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 22px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+  }
+
+  nav a {
+    color: var(--ink-dim);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    padding-block: 8px;
+    transition: color 140ms ease, border-color 140ms ease;
+  }
+
+  nav a:hover {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+
+  .footer-meta {
+    grid-column: 1 / -1;
+    margin-top: 8px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.5;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+  }
+
+  @media (max-width: 600px) {
+    .footer-grid {
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+
+    .footer-meta {
+      margin-top: 0;
+    }
+  }
+</style>

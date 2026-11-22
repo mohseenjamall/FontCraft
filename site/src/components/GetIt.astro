@@ -1,0 +1,169 @@
+---
+const releasesUrl = 'https://github.com/mohseenjamall/FontCraft/releases/latest';
+const releaseUrl = 'https://github.com/mohseenjamall/FontCraft/releases/tag/v1.1.0';
+---
+
+<section class="section" id="get-it">
+  <div class="section-bar"><div class="container section-bar-inner"><span>04 / Get it</span><span>Free · Windows now</span></div></div>
+  <div class="container">
+    <div class="section-head">
+      <h2 data-reveal>Download FontCraft <span data-ver>1.1.0</span></h2>
+      <p class="lede" data-reveal>Windows, 64-bit. Free. No account, no sign-in.</p>
+    </div>
+
+    <div class="get-grid">
+      <div class="get-main" data-reveal>
+        <p class="meta">Windows / available now</p>
+        <a class="btn btn-primary get-download" href={releasesUrl} data-download target="_blank" rel="noopener noreferrer">
+          Download<span data-os> for Windows</span> <span aria-hidden="true">&darr;</span>
+        </a>
+        <p class="get-note">
+          The release contains:
+        </p>
+        <ul class="asset-list" data-assets>
+          <li><code>FontCraft-1.1.0-windows-x64.exe</code></li>
+          <li><code>FontCraft-1.1.0-windows-x64.zip</code></li>
+          <li><code>SHA256SUMS.txt</code></li>
+        </ul>
+        <p class="get-note">No installer yet: run the file directly.</p>
+        <p class="get-note" data-mac-note hidden>macOS 11+, Apple Silicon and Intel: one file, <code>FontCraft-<span data-ver>1.1.0</span>-macos.dmg</code>. Open it and drag FontCraft to Applications.</p>
+        <a class="text-link release-link" href={releaseUrl} data-release-link target="_blank" rel="noopener noreferrer">What changed in <span data-ver>1.1.0</span></a>
+      </div>
+
+      <div class="platforms" data-reveal>
+        <p class="meta">Platforms</p>
+        <ul>
+          <li>
+            <span class="platform-name">Windows</span>
+            <span class="platform-status available">Available now</span>
+          </li>
+          <li class="is-disabled" aria-disabled="true" data-platform="mac">
+            <span class="platform-name">macOS</span>
+            <span class="platform-status soon">Soon</span>
+          </li>
+          <li class="is-disabled" aria-disabled="true" data-platform="linux">
+            <span class="platform-name">Linux</span>
+            <span class="platform-status soon">Soon</span>
+          </li>
+        </ul>
+        <p class="platform-note" data-untested-note hidden>
+          The macOS and Linux builds are untested on real machines so far; please report problems.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .get-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(260px, 4fr);
+    gap: clamp(2rem, 5vw, 5rem);
+    align-items: start;
+  }
+
+  .get-main {
+    max-width: 560px;
+  }
+
+  .get-download {
+    margin-top: 18px;
+  }
+
+  .get-note {
+    margin-top: 24px;
+    color: var(--ink-dim);
+  }
+
+  .asset-list {
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--line);
+  }
+
+  .asset-list li {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-dim);
+    overflow-wrap: anywhere;
+  }
+
+  .asset-list code {
+    font-size: 11px;
+    letter-spacing: 0.01em;
+  }
+
+  .release-link {
+    display: inline-block;
+    margin-top: 18px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+
+  .platforms {
+    padding-left: clamp(1.5rem, 3vw, 3rem);
+    border-left: 1px solid var(--line);
+  }
+
+  .platforms ul {
+    margin: 16px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .platforms li {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.3;
+    letter-spacing: 0.02em;
+  }
+
+  .platforms li:first-child {
+    border-top: 1px solid var(--line);
+  }
+
+  .platform-name {
+    color: var(--ink);
+  }
+
+  .platform-status {
+    color: var(--ink-faint);
+  }
+
+  .platform-status.available {
+    color: var(--accent);
+  }
+
+  .platforms .is-disabled .platform-name {
+    color: var(--ink-dim);
+  }
+
+  .platform-note {
+    margin-top: 16px;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    color: var(--ink-dim);
+  }
+
+  @media (max-width: 899px) {
+    .get-grid {
+      grid-template-columns: 1fr;
+      gap: 2.5rem;
+    }
+
+    .platforms {
+      padding-left: 0;
+      padding-top: 2rem;
+      border-left: 0;
+      border-top: 1px solid var(--line);
+    }
+  }
+</style>

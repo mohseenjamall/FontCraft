@@ -1,0 +1,54 @@
+---
+const supportUrl = 'https://buymeacoffee.com/mohseenjamalll';
+---
+
+<section class="support" id="support" aria-labelledby="support-title">
+  <div class="container support-inner">
+    <div class="support-copy">
+      <h2 id="support-title">Help it grow</h2>
+      <p>
+        FontCraft is free and still growing. If it saves you time, your support helps me ship the macOS
+        and Linux versions and the features still marked Coming.
+      </p>
+    </div>
+    <a class="btn btn-primary" href={supportUrl} target="_blank" rel="noopener noreferrer">
+      Buy me a coffee <span aria-hidden="true">&nearr;</span>
+    </a>
+  </div>
+</section>
+
+<style>
+  .support {
+    border-top: 1px solid var(--line);
+    padding-block: clamp(2.5rem, 6vw, 4.5rem);
+  }
+
+  .support-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: clamp(1.5rem, 4vw, 4rem);
+    flex-wrap: wrap;
+  }
+
+  .support-copy {
+    max-width: 58ch;
+  }
+
+  .support h2 {
+    font-size: var(--fs-h3);
+    max-width: none;
+  }
+
+  .support p {
+    margin-top: 12px;
+    color: var(--ink-dim);
+  }
+
+  @media (max-width: 480px) {
+    .support-inner :global(.btn) {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>

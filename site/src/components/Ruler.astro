@@ -1,0 +1,280 @@
+---
+// Ruler scrollbar: replaces the native scrollbar on wide screens with a strip of tick marks
+// that slides past a fixed marker. Shows page position as a percentage and the current section.
+---
+
+<div class="ruler-wrap" hidden>
+  <div
+    class="ruler"
+    role="scrollbar"
+    aria-controls="main"
+    aria-orientation="vertical"
+    aria-valuemin="0"
+    aria-valuemax="100"
+    aria-valuenow="0"
+    aria-label="Page position"
+  >
+    <div class="ruler-bg" aria-hidden="true"></div>
+    <div class="ruler-track" aria-hidden="true"></div>
+  </div>
+  <div class="ruler-mark" aria-hidden="true">
+    <span class="ruler-line"></span>
+    <span class="ruler-read"><span class="ruler-aa">Aa</span><span class="ruler-px">6 px</span></span>
+  </div>
+  <p class="ruler-name" aria-hidden="true">FontCraft</p>
+</div>
+
+<script>
+  const wrap = document.querySelector<HTMLElement>('.ruler-wrap');
+
+  if (wrap) {
+    const ruler = wrap.querySelector<HTMLElement>('.ruler')!;
+    const track = wrap.querySelector<HTMLElement>('.ruler-track')!;
+    const mark = wrap.querySelector<HTMLElement>('.ruler-mark')!;
+    const aa = wrap.querySelector<HTMLElement>('.ruler-aa')!;
+    const px = wrap.querySelector<HTMLElement>('.ruler-px')!;
+    const nameEl = wrap.querySelector<HTMLElement>('.ruler-name')!;
+
+    const sections = [
+      { id: 'top', label: 'FontCraft' },
+      { id: 'highlights', label: 'Highlights' },
+      { id: 'compare', label: 'Compare' },
+      { id: 'get-it', label: 'Get it' },
+    ];
+
+    const STEPS = 50; // a tick every 2% of the page
+    // The ruler is a type-size scale: the top of the page is 6 px, the bottom 180 px (the range FontCraft previews).
+    const MIN_PX = 6;
+    const MAX_PX = 180;
+    for (let i = 0; i <= STEPS; i++) {
+      const tick = document.createElement('span');
+      tick.className = i % 10 === 0 ? 'tick tick-long' : i % 5 === 0 ? 'tick tick-mid' : 'tick';
+      tick.style.top = `${(i / STEPS) * 100}%`;
+      if (i % 10 === 0) tick.dataset.label = String(Math.round(MIN_PX + (i / STEPS) * (MAX_PX - MIN_PX)));
+      track.appendChild(tick);
+    }
+
+    const maxScroll = () => Math.max(document.documentElement.scrollHeight - window.innerHeight, 0);
+    let queued = false;
+
+    const update = () => {
+      queued = false;
+      const vh = window.innerHeight;
+      const max = maxScroll();
+      const p = max > 0 ? Math.min(Math.max(window.scrollY / max, 0), 1) : 0;
+      const markY = Math.min(Math.max(p * vh, 2), vh - 2);
+      const trackH = vh * 5;
+
+      track.style.height = `${trackH}px`;
+      track.style.transform = `translate3d(0, ${markY - p * trackH}px, 0)`;
+      mark.style.transform = `translate3d(0, ${markY}px, 0)`;
+
+      const size = Math.round(MIN_PX + p * (MAX_PX - MIN_PX));
+      aa.style.fontSize = `${Math.round(16 + p * 40)}px`;
+      px.textContent = `${size} px`;
+      ruler.setAttribute('aria-valuenow', String(Math.round(p * 100)));
+
+      let current = sections[0];
+      for (const s of sections) {
+        const el = document.getElementById(s.id);
+        if (el && el.getBoundingClientRect().top <= vh * 0.4) current = s;
+      }
+      nameEl.textContent = current.label;
+    };
+
+    const queue = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(update);
+    };
+
+    const seek = (clientY: number) => {
+      const p = Math.min(Math.max(clientY / window.innerHeight, 0), 1);
+      window.scrollTo({ top: p * maxScroll(), behavior: 'instant' });
+    };
+
+    ruler.addEventListener('pointerdown', (e) => {
+      ruler.setPointerCapture(e.pointerId);
+      seek(e.clientY);
+    });
+    ruler.addEventListener('pointermove', (e) => {
+      if (ruler.hasPointerCapture(e.pointerId)) seek(e.clientY);
+    });
+
+    // Only where there is room beside the content and a mouse to drag with.
+    const wide = window.matchMedia('(min-width: 1280px) and (pointer: fine)');
+    const apply = () => {
+      wrap.hidden = !wide.matches;
+      if (wide.matches) {
+        document.documentElement.dataset.ruler = 'on';
+        update();
+      } else {
+        delete document.documentElement.dataset.ruler;
+      }
+    };
+
+    wide.addEventListener('change', apply);
+    window.addEventListener('scroll', queue, { passive: true });
+    window.addEventListener('resize', queue);
+    window.addEventListener('load', queue);
+    apply();
+  }
+</script>
+
+<style is:global>
+  html[data-ruler='on'] {
+    scrollbar-width: none;
+  }
+
+  html[data-ruler='on']::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
+
+  .ruler-wrap {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 56px;
+    z-index: 45;
+    pointer-events: none;
+  }
+
+  .ruler-wrap[hidden] {
+    display: none;
+  }
+
+  .ruler {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    cursor: crosshair;
+    pointer-events: auto;
+    touch-action: none;
+  }
+
+  .ruler-bg {
+    position: absolute;
+    inset: 0;
+    background: color-mix(in srgb, var(--bg) 28%, transparent);
+    backdrop-filter: blur(9px);
+    mask-image: linear-gradient(to left, #000 40%, transparent 100%);
+  }
+
+  /* Over the cobalt hero the strip has no backing and the marks turn white. */
+  html[data-on-hero] .ruler-bg {
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  html[data-on-hero] .ruler-line {
+    background: #fff;
+  }
+
+  html[data-on-hero] .ruler-read {
+    color: #fff;
+  }
+
+  html[data-on-hero] .ruler-name {
+    color: rgb(255 255 255 / 0.85);
+  }
+
+  .ruler-track {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    will-change: transform;
+  }
+
+  .ruler .tick {
+    position: absolute;
+    right: 0;
+    width: 10px;
+    height: 1px;
+    background: var(--ink);
+    opacity: 0.4;
+  }
+
+  .ruler .tick-long {
+    width: 20px;
+    opacity: 0.8;
+  }
+
+  .ruler .tick-long::before {
+    content: attr(data-label);
+    position: absolute;
+    right: 24px;
+    top: 0;
+    transform: translateY(-50%);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    color: var(--ink);
+    opacity: 0.6;
+  }
+
+  .ruler-mark {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 56px;
+    will-change: transform;
+  }
+
+  .ruler-line {
+    position: absolute;
+    top: -1.5px;
+    right: 0;
+    width: 56px;
+    height: 3px;
+    background: var(--accent);
+  }
+
+  .ruler .tick-mid {
+    width: 14px;
+    opacity: 0.6;
+  }
+
+  .ruler-read {
+    position: absolute;
+    top: 0;
+    right: 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    transform: translateY(-50%);
+    color: var(--accent);
+  }
+
+  .ruler-aa {
+    font-family: var(--font-display);
+    font-variation-settings: 'opsz' 100, 'SOFT' 30, 'WONK' 1;
+    line-height: 1;
+  }
+
+  .ruler-px {
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: 0.02em;
+  }
+
+  .ruler-name {
+    position: absolute;
+    top: 50%;
+    right: 62px;
+    margin: 0;
+    writing-mode: vertical-rl;
+    transform: translateY(-50%) rotate(180deg);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--ink-dim);
+  }
+</style>

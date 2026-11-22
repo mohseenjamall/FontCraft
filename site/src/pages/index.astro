@@ -1,0 +1,223 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Hero from '../components/Hero.astro';
+import Highlights from '../components/Highlights.astro';
+import Compare from '../components/Compare.astro';
+import GetIt from '../components/GetIt.astro';
+import Support from '../components/Support.astro';
+import Footer from '../components/Footer.astro';
+import Cursor from '../components/Cursor.astro';
+import Ruler from '../components/Ruler.astro';
+
+const title = 'FontCraft - Faster. Lighter. Free.';
+const description =
+  'FontCraft is a fast, native font browser for Windows, macOS and Linux. A free replacement for FontBase, built in Rust.';
+---
+
+<Layout {title} {description}>
+  <Hero />
+  <Highlights />
+  <Compare />
+  <GetIt />
+  <Support />
+  <Footer slot="footer" />
+  <Ruler />
+  <Cursor />
+</Layout>
+
+<script>
+  import { pickAsset } from '../lib/pick-asset.mjs';
+  import { detectPlatform } from '../lib/detect-platform.mjs';
+
+  // Keeps the version numbers and the Download buttons in step with the newest GitHub release,
+  // so nothing here is edited by hand at release time. The HTML holds the last known values as a
+  // fallback if GitHub can't be reached.
+  const REPO = 'mohseenjamall/FontCraft';
+  const CACHE_KEY = 'fontcraft-latest-release';
+
+  // macOS gets the one universal .dmg, so Apple Silicon and Intel need no telling apart.
+  const platform = detectPlatform({
+    uaPlatform: navigator.userAgentData?.platform,
+    userAgent: navigator.userAgent,
+    maxTouchPoints: navigator.maxTouchPoints,
+  });
+  const OS_LABEL = { windows: 'Windows', mac: 'macOS', linux: 'Linux' };
+
+  const apply = (release) => {
+    const tag = release.tag;
+    const ver = tag.replace(/^v/, '');
+    const asset = pickAsset(release.assets, platform);
+
+    document.querySelectorAll('[data-tag]').forEach((el) => (el.textContent = tag));
+    document.querySelectorAll('[data-ver]').forEach((el) => (el.textContent = ver));
+    document.querySelectorAll('[data-release-link]').forEach((a) => a.setAttribute('href', release.url));
+
+    // Label and link only name an OS when the release really has its build; otherwise neutral -> releases page.
+    document.querySelectorAll('[data-os]').forEach((el) => (el.textContent = asset ? ' for ' + OS_LABEL[platform] : ''));
+    document.querySelectorAll('a[data-download]').forEach((a) => {
+      if (asset) {
+        a.setAttribute('href', asset.url);
+        a.removeAttribute('target');
+      } else {
+        a.setAttribute('href', release.url);
+      }
+    });
+
+    // Flip a platform row to "Available now" only when its asset exists.
+    const has = { mac: !!pickAsset(release.assets, 'mac'), linux: !!pickAsset(release.assets, 'linux') };
+    document.querySelectorAll('[data-platform]').forEach((li) => {
+      const key = li.getAttribute('data-platform');
+      if (!has[key]) return;
+      li.classList.remove('is-disabled');
+      li.removeAttribute('aria-disabled');
+      const st = li.querySelector('.platform-status');
+      st.classList.replace('soon', 'available');
+      st.textContent = 'Available now';
+    });
+    document.querySelectorAll('[data-mac-note]').forEach((el) => (el.hidden = !has.mac));
+    document.querySelectorAll('[data-untested-note]').forEach((el) => (el.hidden = !(has.mac || has.linux)));
+    const names = ['Windows', has.mac && 'macOS', has.linux && 'Linux'].filter(Boolean);
+    const soon = ['macOS', 'Linux'].filter((n) => !names.includes(n));
+    document.querySelectorAll('[data-hero-platforms]').forEach((el) => {
+      el.textContent = names.join(', ').replace(/, ([^,]*)$/, ' and $1') + ' now.' + (soon.length ? ' ' + soon.join(' and ') + ' soon.' : '');
+    });
+
+    const list = document.querySelector('[data-assets]');
+    if (list && release.assets.length) {
+      list.replaceChildren(
+        ...release.assets.map((asset) => {
+          const li = document.createElement('li');
+          const code = document.createElement('code');
+          code.textContent = asset.name;
+          li.appendChild(code);
+          return li;
+        }),
+      );
+    }
+  };
+
+  const valid = (r) =>
+    r &&
+    typeof r.tag === 'string' &&
+    /^v?\d+\.\d+\.\d+$/.test(r.tag) &&
+    typeof r.url === 'string' &&
+    r.url.startsWith('https://github.com/' + REPO + '/') &&
+    Array.isArray(r.assets) &&
+    r.assets.every((a) => a && typeof a.name === 'string' && typeof a.url === 'string' && a.url.startsWith('https://github.com/' + REPO + '/releases/download/'));
+
+  let cached = null;
+  try {
+    cached = JSON.parse(sessionStorage.getItem(CACHE_KEY));
+  } catch {}
+
+  if (valid(cached)) {
+    apply(cached);
+  } else {
+    fetch('https://api.github.com/repos/' + REPO + '/releases/latest', {
+      headers: { Accept: 'application/vnd.github+json' },
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data) => {
+        const release = {
+          tag: data.tag_name,
+          url: data.html_url,
+          assets: (data.assets || []).map((a) => ({ name: a.name, url: a.browser_download_url })),
+        };
+        if (!valid(release)) return;
+        apply(release);
+        try {
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify(release));
+        } catch {}
+      })
+      .catch(() => {});
+  }
+</script>
+
+<script>
+  import gsap from 'gsap';
+  import { ScrollTrigger } from 'gsap/ScrollTrigger';
+  import Lenis from 'lenis';
+
+  gsap.registerPlugin(ScrollTrigger);
+
+  const mm = gsap.matchMedia();
+
+  mm.add('(prefers-reduced-motion: no-preference)', () => {
+    const reveals = gsap.utils.toArray('[data-reveal]');
+
+    if (reveals.length) {
+      try {
+        gsap.set(reveals, { opacity: 0, y: 18 });
+
+        ScrollTrigger.batch(reveals, {
+          start: 'top 88%',
+          once: true,
+          onEnter: (batch) =>
+            gsap.to(batch, {
+              opacity: 1,
+              y: 0,
+              duration: 0.6,
+              stagger: 0.08,
+              ease: 'power2.out',
+              overwrite: true,
+            }),
+        });
+      } catch {
+        gsap.set(reveals, { clearProps: 'opacity,transform' });
+      }
+    }
+
+    const heroShot = document.querySelector('[data-hero-shot]');
+
+    if (heroShot) {
+      gsap.to(heroShot, {
+        y: -24,
+        ease: 'none',
+        scrollTrigger: {
+          trigger: '.hero',
+          start: 'top top',
+          end: 'bottom top',
+          scrub: 0.6,
+        },
+      });
+    }
+
+    // Hero: headline slides in on load (stays visible).
+    gsap.from('.hero h1 span', { yPercent: 40, duration: 0.9, stagger: 0.1, ease: 'power3.out' });
+    gsap.to('[data-ring]', {
+      rotation: 140,
+      transformOrigin: '50% 50%',
+      ease: 'none',
+      scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: 0.6 },
+    });
+
+    // Smooth wheel scrolling (as on the ArtCraft pages), driven by the GSAP ticker.
+    const lenis = new Lenis({ anchors: { offset: -65 } });
+    lenis.on('scroll', ScrollTrigger.update);
+    const tick = (time) => lenis.raf(time * 1000);
+    gsap.ticker.add(tick);
+    gsap.ticker.lagSmoothing(0);
+
+    // Comparison rows file in one by one.
+    gsap.utils.toArray('.table-block').forEach((block) => {
+      gsap.from(block.querySelectorAll('tbody tr'), {
+        opacity: 0,
+        x: -24,
+        duration: 0.5,
+        stagger: 0.07,
+        ease: 'power2.out',
+        scrollTrigger: { trigger: block, start: 'top 80%', once: true },
+      });
+    });
+
+    window.addEventListener('load', () => ScrollTrigger.refresh(), { once: true });
+
+    return () => {
+      gsap.ticker.remove(tick);
+      lenis.destroy();
+      if (reveals.length) {
+        gsap.set(reveals, { clearProps: 'opacity,transform' });
+      }
+    };
+  });
+</script>

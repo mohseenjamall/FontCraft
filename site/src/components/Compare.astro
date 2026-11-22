@@ -1,0 +1,312 @@
+---
+const evaluationUrl = 'https://github.com/mohseenjamall/FontCraft/blob/main/EVALUATION.md';
+---
+
+<section class="section" id="compare">
+  <div class="section-bar"><div class="container section-bar-inner"><span>03 / Compare</span><span>Measured 21 Nov 2026</span></div></div>
+  <div class="container">
+    <div class="section-head">
+      <h2 data-reveal>Smaller, faster, and missing some things</h2>
+      <p class="lede" data-reveal>
+        FontBase is still the fuller font manager. FontCraft is the faster browser. The numbers
+        come from one machine, three runs per app, median result.
+      </p>
+    </div>
+
+    <div class="table-block" data-reveal>
+      <div class="table-head">
+        <h3>Speed and size</h3>
+        <p class="meta">FontBase 2026.7.4 vs FontCraft 1.0.0</p>
+      </div>
+
+      <table>
+        <caption class="sr-only">
+          Benchmark results for FontBase 2026.7.4 and FontCraft 1.0.0
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Measure</th>
+            <th scope="col">FontBase</th>
+            <th scope="col">FontCraft</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Ready after start</th>
+            <td><span class="num">6.21 s</span></td>
+            <td><span class="num strong">1.46 s</span><span class="delta">about 4x faster</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Memory in use</th>
+            <td><span class="num">784 MB</span></td>
+            <td><span class="num strong">104 MB</span><span class="delta">7.5x less</span></td>
+          </tr>
+          <tr>
+            <th scope="row">CPU time while starting</th>
+            <td><span class="num">9.95 s</span></td>
+            <td><span class="num strong">0.81 s</span><span class="delta">about 12x less</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Disk space</th>
+            <td><span class="num">438.3 MB</span></td>
+            <td><span class="num strong">6.3 MB</span><span class="delta">70x smaller</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Processes</th>
+            <td><span class="num">5</span></td>
+            <td><span class="num strong">1</span><span class="delta">5x fewer</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Threads</th>
+            <td><span class="num">182</span></td>
+            <td><span class="num strong">18</span><span class="delta">10x fewer</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="footnote">
+        Measured 21 November 2026 on an AMD Ryzen 7 5800X, 32 GB RAM, Windows 11, with about 270
+        families and 540 styles. Median of 3 runs. <a class="text-link" href={evaluationUrl} target="_blank" rel="noopener noreferrer">Full
+        method and raw results</a>.
+      </p>
+    </div>
+
+    <div class="table-block" data-reveal>
+      <div class="table-head">
+        <h3>Features</h3>
+        <p class="meta">FontCraft 1.1.0</p>
+      </div>
+
+      <table>
+        <caption class="sr-only">
+          Feature comparison for FontBase and FontCraft 1.1.0
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Feature</th>
+            <th scope="col">FontBase</th>
+            <th scope="col">FontCraft</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">All fonts in one list, grouped by family</th>
+            <td><span class="status">Yes</span></td>
+            <td><span class="status">Yes</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Live preview with your own text</th>
+            <td><span class="status">Yes</span></td>
+            <td><span class="status">Yes</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Preview size 6-180 px</th>
+            <td><span class="status">Yes</span></td>
+            <td><span class="status">Yes</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Right sample for non-Latin scripts</th>
+            <td><span class="status">Yes</span></td>
+            <td><span class="status">Yes</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Family details and waterfall</th>
+            <td><span class="status">Yes</span></td>
+            <td><span class="status">Yes</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Search by name</th>
+            <td><span class="status">Yes</span></td>
+            <td><span class="status">Yes</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Add your own font folders</th>
+            <td><span class="status">Yes</span></td>
+            <td><span class="status">Yes</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Turn fonts on or off without deleting files</th>
+            <td><span class="status">Yes</span></td>
+            <td><span class="status">Yes</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Reads fonts FontBase activated</th>
+            <td><span class="status">Yes</span></td>
+            <td><span class="status">Yes</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Works offline, no account</th>
+            <td><span class="status partly">Partly</span></td>
+            <td><span class="status">Yes</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Collections and tags</th>
+            <td><span class="status">Yes</span></td>
+            <td><span class="status coming">Coming</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Character map</th>
+            <td><span class="status">Yes</span></td>
+            <td><span class="status coming">Coming</span></td>
+          </tr>
+          <tr>
+            <th scope="row">OpenType feature controls</th>
+            <td><span class="status">Yes</span></td>
+            <td><span class="status coming">Coming</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Variable-font sliders</th>
+            <td><span class="status">Yes</span></td>
+            <td><span class="status coming">Coming</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="footnote">
+        FontBase rows are limited to features confirmed in its files. For FontBase, Partly means
+        its sign-in features need an account. Coming means the feature is not in FontCraft today.
+      </p>
+    </div>
+  </div>
+</section>
+
+<style>
+  .table-block + .table-block {
+    margin-top: clamp(2.5rem, 5vw, 4rem);
+  }
+
+  .table-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line-strong);
+  }
+
+  .table-head h3 {
+    font-size: clamp(1.4rem, 2.2vw, 1.8rem);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  th,
+  td {
+    padding: 13px 12px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--line);
+    overflow-wrap: break-word;
+  }
+
+  thead th {
+    padding-top: 12px;
+    padding-bottom: 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+    color: var(--ink-faint);
+  }
+
+  tbody th {
+    font-size: 0.95rem;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--ink);
+  }
+
+  td {
+    color: var(--ink-dim);
+  }
+
+  th:first-child,
+  td:first-child {
+    width: 44%;
+    padding-left: 0;
+  }
+
+  th:last-child,
+  td:last-child {
+    padding-right: 0;
+  }
+
+  .num {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  .num.strong {
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  .delta {
+    display: block;
+    margin-top: 2px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    line-height: 1.4;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+  }
+
+  .status {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.4;
+    letter-spacing: 0.06em;
+  }
+
+  .status.partly {
+    color: var(--ink-faint);
+  }
+
+  .status.coming {
+    color: var(--accent);
+  }
+
+  .footnote {
+    max-width: 74ch;
+    margin-top: 14px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+    color: var(--ink-faint);
+  }
+
+  @media (max-width: 600px) {
+    th,
+    td {
+      padding: 11px 7px;
+    }
+
+    th:first-child,
+    td:first-child {
+      width: 46%;
+      padding-left: 0;
+    }
+
+    tbody th {
+      font-size: 0.86rem;
+    }
+
+    .num {
+      font-size: 0.8rem;
+    }
+
+    .delta {
+      font-size: 8px;
+    }
+  }
+</style>

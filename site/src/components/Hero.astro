@@ -1,0 +1,231 @@
+---
+import { Image } from 'astro:assets';
+import engraving from '../assets/engraving-hero.jpg';
+---
+
+<section class="hero">
+  <div class="container">
+    <div class="hero-top">
+      <p class="label">01 / FontCraft</p>
+      <p class="meta">Windows x64 / <span data-tag>v1.1.0</span></p>
+    </div>
+
+    <div class="hero-grid">
+      <h1>
+        <span>Faster.</span>
+        <span>Lighter.</span>
+        <span class="free">Free.</span>
+      </h1>
+
+      <div class="hero-aside">
+        <p class="hero-sub">
+          A fast native font browser for the desktop. A lighter replacement for FontBase, free, built in Rust.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="https://github.com/mohseenjamall/FontCraft/releases/latest" data-download target="_blank" rel="noopener noreferrer">
+            Download<span data-os> for Windows</span> <span aria-hidden="true">&darr;</span>
+          </a>
+          <a class="btn btn-secondary" href="https://github.com/mohseenjamall/FontCraft" target="_blank" rel="noopener noreferrer">
+            View on GitHub <span aria-hidden="true">&nearr;</span>
+          </a>
+        </div>
+        <p class="hero-platforms" data-hero-platforms>Windows now. macOS and Linux soon.</p>
+      </div>
+
+      <div class="hero-medal">
+        <svg class="medal-ring" viewBox="0 0 600 600" aria-hidden="true" data-ring>
+          <defs>
+            <path id="medal-path" d="M 300 300 m -276 0 a 276 276 0 1 1 552 0 a 276 276 0 1 1 -552 0" />
+          </defs>
+          <circle cx="300" cy="300" r="296" fill="none" stroke="currentColor" stroke-opacity="0.35" />
+          <text class="medal-text">
+            <textPath href="#medal-path" textLength="1728" lengthAdjust="spacing">
+              FontCraft · Faster · Lighter · Free · For the desktop · FontCraft · Faster · Lighter · Free ·
+            </textPath>
+          </text>
+        </svg>
+        <Image
+          class="hero-art"
+          src={engraving}
+          alt="An engraved hand drawing a serif capital F on paper, with compasses, a quill and loose letters around it."
+          widths={[480, 720, 960, 1280]}
+          sizes="(max-width: 899px) 80vw, 440px"
+          format="webp"
+          quality={82}
+          loading="eager"
+          fetchpriority="high"
+        />
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* One bright moment: a cobalt scene that matches the engraving's own blue. The artwork runs
+     off its edges (book, hand, compass), so it sits in a hairline frame where that reads as a crop. */
+  .hero {
+    overflow: hidden;
+    background: var(--cobalt);
+    color: #fff;
+    padding-top: clamp(2.5rem, 6vw, 4.5rem);
+    padding-bottom: clamp(3rem, 7vw, 5.5rem);
+  }
+
+  .hero-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgb(255 255 255 / 0.28);
+    margin-bottom: clamp(2.5rem, 7vw, 5rem);
+  }
+
+  .hero :global(.label) {
+    color: #fff;
+  }
+
+  .hero :global(.meta) {
+    color: rgb(255 255 255 / 0.78);
+  }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    column-gap: clamp(2rem, 5vw, 5rem);
+    align-items: start;
+  }
+
+  h1 {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  h1 span {
+    display: block;
+    color: #b9c9ff;
+  }
+
+  h1 .free {
+    color: #fff;
+  }
+
+  .hero-aside {
+    grid-column: 1;
+    grid-row: 2;
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgb(255 255 255 / 0.28);
+  }
+
+  /* A medallion: the artwork runs off the edge of a circle, so nothing reads as cut. The ring of
+     text turns as the page scrolls. */
+  .hero-medal {
+    position: relative;
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+    justify-self: end;
+    width: min(100%, 560px);
+    aspect-ratio: 1;
+  }
+
+  .medal-ring {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    color: #fff;
+  }
+
+  .medal-text {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    fill: rgb(255 255 255 / 0.85);
+  }
+
+  .hero :global(.hero-art) {
+    position: absolute;
+    inset: 7%;
+    width: 86%;
+    height: 86%;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid rgb(255 255 255 / 0.55);
+  }
+
+  .hero-sub {
+    max-width: 36ch;
+    font-size: var(--fs-lede);
+    line-height: 1.5;
+    color: #e8eeff;
+  }
+
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 28px;
+  }
+
+  .hero :global(.btn-primary) {
+    background: #fff;
+    border-color: #fff;
+    color: #0b0b0c;
+  }
+
+  .hero :global(.btn-secondary) {
+    border-color: rgb(255 255 255 / 0.6);
+    color: #fff;
+  }
+
+  .hero-platforms {
+    margin-top: 18px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.5;
+    letter-spacing: var(--tr-mono);
+    color: rgb(255 255 255 / 0.78);
+  }
+
+  @media (max-width: 899px) {
+    .hero-grid {
+      grid-template-columns: 1fr;
+      grid-template-rows: none;
+      row-gap: 2rem;
+    }
+
+    h1,
+    .hero-aside,
+    .hero-medal {
+      grid-column: 1;
+      grid-row: auto;
+    }
+
+    .hero-aside {
+      margin-top: 0;
+    }
+
+    .hero-medal {
+      justify-self: center;
+      width: min(100%, 400px);
+    }
+
+    .hero-sub {
+      max-width: 46ch;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .hero-top {
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .hero-actions {
+      flex-direction: column;
+      align-items: stretch;
+    }
+  }
+</style>

@@ -1,0 +1,463 @@
+---
+import { Image } from 'astro:assets';
+import arabicShot from '../assets/arabic.png';
+import activationShot from '../assets/activation-off.png';
+---
+
+<section class="section" id="highlights">
+  <div class="section-bar"><div class="container section-bar-inner"><span>02 / Highlights</span><span>What it does</span></div></div>
+  <div class="container">
+    <div class="section-head">
+      <h2 data-reveal>Five things it does</h2>
+      <p class="lede" data-reveal>
+        A short list, because FontCraft is a small app with one job: show you your fonts, quickly.
+        The gaps are in the comparison below.
+      </p>
+    </div>
+
+    <ol class="highlights">
+      <li class="highlight" data-reveal>
+        <span class="h-number" aria-hidden="true">01</span>
+        <div class="h-body">
+          <h3>Every font, one list</h3>
+          <p>
+            System fonts, fonts installed for your user, fonts FontBase turned on, and folders you
+            add, grouped by family. Search by name or by where a font is stored.
+          </p>
+        </div>
+        <ul class="h-aside source-list" aria-label="Font sources shown in FontCraft">
+          <li>System</li>
+          <li>User installed</li>
+          <li>FontBase</li>
+          <li>Added folders</li>
+        </ul>
+      </li>
+
+      <li class="highlight" data-reveal>
+        <span class="h-number" aria-hidden="true">02</span>
+        <div class="h-body">
+          <h3>Your text, at your size</h3>
+          <p>
+            Type your own sample and set it from 6 to 180 px. Every row updates in its own
+            typeface, so you compare the letters, not the file names.
+          </p>
+        </div>
+
+        <div class="sample" data-sample>
+          <div class="sample-head">
+            <span class="meta">Live sample / 6-180 px</span>
+            <span class="sample-font" data-sample-font>Fraunces</span>
+          </div>
+          <p
+            class="sample-text is-fraunces"
+            data-sample-text
+            lang="en"
+            dir="ltr"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            The quick brown fox jumps over the lazy dog.
+          </p>
+          <div class="sample-foot">
+            <span class="meta" data-sample-note>Latin / serif</span>
+            <button class="sample-next" type="button" data-sample-next hidden>
+              Next sample <span aria-hidden="true">&rarr;</span>
+            </button>
+          </div>
+        </div>
+      </li>
+
+      <li class="highlight" data-reveal>
+        <span class="h-number" aria-hidden="true">03</span>
+        <div class="h-body">
+          <h3>The right script, not a row of boxes</h3>
+          <p>
+            A font with no Latin letters gets a sample in its own writing system: Arabic, Hebrew,
+            Chinese, Japanese, Devanagari, Thai and others.
+          </p>
+        </div>
+        <figure class="h-media">
+          <Image
+            src={arabicShot}
+            alt="FontCraft font list showing Arabic sample text set in several Arabic typefaces."
+            widths={[480, 720, 960]}
+            sizes="(max-width: 899px) calc(100vw - 90px), 480px"
+            format="webp"
+            quality={80}
+            loading="lazy"
+            decoding="async"
+          />
+          <figcaption>
+            Arabic samples in the list. Fonts without Latin letters are previewed in their own
+            script.
+          </figcaption>
+        </figure>
+      </li>
+
+      <li class="highlight" data-reveal>
+        <span class="h-number" aria-hidden="true">04</span>
+        <div class="h-body">
+          <h3>Turn it on, turn it off</h3>
+          <p>
+            Switch a family on or off and every Windows app sees it: Word, Photoshop, Notepad. The
+            file is never deleted. FontCraft keeps its Windows settings and puts them back. System
+            fonts stay locked.
+          </p>
+        </div>
+        <figure class="h-media">
+          <Image
+            src={activationShot}
+            alt="FontCraft family panel for a font that is turned off, with a Turn on button and a waterfall preview."
+            widths={[480, 720, 960]}
+            sizes="(max-width: 899px) calc(100vw - 90px), 480px"
+            format="webp"
+            quality={80}
+            loading="lazy"
+            decoding="async"
+          />
+          <figcaption>
+            A font that is off. The panel offers Turn on; the file stays where it is.
+          </figcaption>
+        </figure>
+      </li>
+
+      <li class="highlight" data-reveal>
+        <span class="h-number" aria-hidden="true">05</span>
+        <div class="h-body">
+          <h3>The whole family, at four sizes</h3>
+          <p>
+            Click a family to see every style and a waterfall at 72, 48, 24 and 14 px.
+          </p>
+        </div>
+        <ul class="h-aside scale-list" aria-label="Waterfall sizes">
+          <li><span class="scale-aa aa-72" aria-hidden="true">Aa</span><span class="meta">72 px</span></li>
+          <li><span class="scale-aa aa-48" aria-hidden="true">Aa</span><span class="meta">48 px</span></li>
+          <li><span class="scale-aa aa-24" aria-hidden="true">Aa</span><span class="meta">24 px</span></li>
+          <li><span class="scale-aa aa-14" aria-hidden="true">Aa</span><span class="meta">14 px</span></li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<script>
+  const sample = document.querySelector('[data-sample]');
+
+  if (sample) {
+    const textEl = sample.querySelector('[data-sample-text]');
+    const fontEl = sample.querySelector('[data-sample-font]');
+    const noteEl = sample.querySelector('[data-sample-note]');
+    const nextBtn = sample.querySelector('[data-sample-next]');
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    const samples = [
+      {
+        text: 'The quick brown fox jumps over the lazy dog.',
+        lang: 'en',
+        dir: 'ltr',
+        font: 'Fraunces',
+        note: 'Latin / serif',
+        className: 'is-fraunces',
+      },
+      {
+        text: 'Sphinx of black quartz, judge my vow.',
+        lang: 'en',
+        dir: 'ltr',
+        font: 'Archivo',
+        note: 'Latin / grotesk',
+        className: 'is-archivo',
+      },
+      {
+        text: 'مرحبا بالعالم',
+        lang: 'ar',
+        dir: 'rtl',
+        font: 'Noto Naskh Arabic',
+        note: 'Arabic / naskh',
+        className: 'is-arabic',
+      },
+    ];
+
+    let index = 0;
+    let busy = false;
+
+    const apply = (item) => {
+      textEl.textContent = item.text;
+      textEl.lang = item.lang;
+      textEl.dir = item.dir;
+      textEl.className = `sample-text ${item.className}`;
+      fontEl.textContent = item.font;
+      noteEl.textContent = item.note;
+    };
+
+    nextBtn.hidden = false;
+    nextBtn.addEventListener('click', () => {
+      if (busy) return;
+
+      index = (index + 1) % samples.length;
+      const item = samples[index];
+
+      if (reduceMotion.matches) {
+        apply(item);
+        return;
+      }
+
+      busy = true;
+      textEl.classList.add('is-fading');
+      window.setTimeout(() => {
+        apply(item);
+        textEl.classList.remove('is-fading');
+        busy = false;
+      }, 150);
+    });
+  }
+</script>
+
+<style>
+  /* Hairline grid: cells sit 1px apart on a line-coloured ground */
+  .highlights {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+  }
+
+  .highlight {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: clamp(1.25rem, 2.4vw, 2rem);
+    background: var(--bg);
+    transition: background-color 0.2s ease;
+  }
+
+  .highlight:hover {
+    background: var(--bg-raised);
+  }
+
+  .highlight:nth-child(2) {
+    grid-column: span 2;
+  }
+
+  .h-number {
+    position: absolute;
+    top: clamp(1.25rem, 2.4vw, 2rem);
+    right: clamp(1.25rem, 2.4vw, 2rem);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: var(--ink-faint);
+  }
+
+  .h-body {
+    padding-top: 28px;
+  }
+
+  .h-body p {
+    max-width: 48ch;
+    margin-top: 14px;
+    color: var(--ink-dim);
+  }
+
+  .h-media {
+    margin: 0;
+  }
+
+  .h-media :global(img) {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--line-strong);
+  }
+
+  .h-media figcaption {
+    margin-top: 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.5;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+  }
+
+  .h-aside {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .source-list {
+    border-top: 1px solid var(--line);
+  }
+
+  .source-list li {
+    padding: 13px 0;
+    border-bottom: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: clamp(0.9rem, 1.4vw, 1.1rem);
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+    color: var(--ink-dim);
+  }
+
+  .source-list li::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 12px;
+    background: var(--accent);
+    vertical-align: 0.08em;
+  }
+
+  .scale-list {
+    border-top: 1px solid var(--line);
+  }
+
+  .scale-list li {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .scale-aa {
+    font-family: var(--font-display);
+    font-weight: 600;
+    line-height: 1;
+    font-variation-settings: 'opsz' 100, 'SOFT' 30, 'WONK' 1;
+  }
+
+  .aa-72 {
+    font-size: 3.4rem;
+  }
+
+  .aa-48 {
+    font-size: 2.4rem;
+  }
+
+  .aa-24 {
+    font-size: 1.45rem;
+  }
+
+  .aa-14 {
+    font-size: 0.9rem;
+  }
+
+  .sample {
+    margin-top: 4px;
+    padding: clamp(18px, 2.6vw, 28px);
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--accent);
+  }
+
+  .sample-head,
+  .sample-foot {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .sample-head {
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .sample-font {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    color: var(--ink);
+  }
+
+  .sample-text {
+    display: flex;
+    align-items: center;
+    min-height: clamp(96px, 9vw, 128px);
+    padding-block: 16px;
+    font-size: clamp(1.6rem, 4vw, 2.9rem);
+    line-height: 1.18;
+    transition: opacity 150ms ease;
+  }
+
+  .sample-text.is-fading {
+    opacity: 0;
+  }
+
+  .sample-text.is-fraunces {
+    font-family: var(--font-display);
+    font-variation-settings: 'opsz' 60, 'SOFT' 30, 'WONK' 1;
+  }
+
+  .sample-text.is-archivo {
+    font-family: var(--font-body);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+  }
+
+  .sample-text.is-arabic {
+    font-family: var(--font-arabic);
+    font-size: clamp(2rem, 5vw, 3.4rem);
+    line-height: 1.6;
+  }
+
+  .sample-foot {
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+
+  .sample-next {
+    appearance: none;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid var(--ink-faint);
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: border-color 140ms ease, color 140ms ease;
+  }
+
+  .sample-next:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  @media (max-width: 899px) {
+    .highlights {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .highlight:nth-child(2) {
+      grid-column: auto;
+    }
+
+    .h-body p {
+      max-width: 56ch;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .sample-text {
+      min-height: 96px;
+      font-size: 1.6rem;
+    }
+
+    .sample-text.is-arabic {
+      font-size: 2rem;
+    }
+  }
+</style>
