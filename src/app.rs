@@ -444,6 +444,7 @@ impl FontApp {
                             .hint_text("Type something to preview…")
                             .desired_width(width)
                             .min_size(egui::vec2(0.0, 28.0))
+                            .align(egui::Align2::LEFT_CENTER)
                             .background_color(color::CHROME_RAISED),
                     );
                     ui.add_space(theme::space::M);
@@ -455,6 +456,7 @@ impl FontApp {
                             .hint_text("Search fonts")
                             .desired_width(180.0)
                             .min_size(egui::vec2(0.0, 28.0))
+                            .align(egui::Align2::LEFT_CENTER)
                             .background_color(color::CHROME_RAISED),
                     );
                 });

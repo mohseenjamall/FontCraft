@@ -1,0 +1,108 @@
+﻿{
+    "runs":  [
+                 {
+                     "WindowSeconds":  null,
+                     "IdleSeconds":  6.88,
+                     "ShowFromTraySeconds":  0.3,
+                     "Processes":  5,
+                     "WorkingSetMB":  770,
+                     "PrivateMB":  769,
+                     "CpuSeconds":  4.11,
+                     "Threads":  178,
+                     "Label":  "FontBase",
+                     "Run":  1
+                 },
+                 {
+                     "WindowSeconds":  null,
+                     "IdleSeconds":  3.6,
+                     "ShowFromTraySeconds":  0.27,
+                     "Processes":  5,
+                     "WorkingSetMB":  869,
+                     "PrivateMB":  759,
+                     "CpuSeconds":  14.73,
+                     "Threads":  177,
+                     "Label":  "FontBase",
+                     "Run":  2
+                 },
+                 {
+                     "WindowSeconds":  null,
+                     "IdleSeconds":  3.62,
+                     "ShowFromTraySeconds":  0.24,
+                     "Processes":  5,
+                     "WorkingSetMB":  766,
+                     "PrivateMB":  760,
+                     "CpuSeconds":  3.78,
+                     "Threads":  175,
+                     "Label":  "FontBase",
+                     "Run":  3
+                 },
+                 {
+                     "WindowSeconds":  0.44,
+                     "IdleSeconds":  1.1,
+                     "ShowFromTraySeconds":  null,
+                     "Processes":  1,
+                     "WorkingSetMB":  103,
+                     "PrivateMB":  106,
+                     "CpuSeconds":  0.73,
+                     "Threads":  18,
+                     "Label":  "FontCraft",
+                     "Run":  1
+                 },
+                 {
+                     "WindowSeconds":  0.42,
+                     "IdleSeconds":  1.05,
+                     "ShowFromTraySeconds":  null,
+                     "Processes":  1,
+                     "WorkingSetMB":  103,
+                     "PrivateMB":  109,
+                     "CpuSeconds":  0.84,
+                     "Threads":  18,
+                     "Label":  "FontCraft",
+                     "Run":  2
+                 },
+                 {
+                     "WindowSeconds":  0.34,
+                     "IdleSeconds":  1,
+                     "ShowFromTraySeconds":  null,
+                     "Processes":  1,
+                     "WorkingSetMB":  104,
+                     "PrivateMB":  106,
+                     "CpuSeconds":  0.81,
+                     "Threads":  18,
+                     "Label":  "FontCraft",
+                     "Run":  3
+                 }
+             ],
+    "median":  [
+                   {
+                       "Label":  "FontBase",
+                       "WindowSeconds":  null,
+                       "IdleSeconds":  3.62,
+                       "ShowFromTraySeconds":  0.27,
+                       "Processes":  5,
+                       "WorkingSetMB":  770,
+                       "PrivateMB":  760,
+                       "CpuSeconds":  4.11,
+                       "Threads":  177,
+                       "DiskMB":  438.3
+                   },
+                   {
+                       "Label":  "FontCraft",
+                       "WindowSeconds":  0.42,
+                       "IdleSeconds":  1.05,
+                       "ShowFromTraySeconds":  null,
+                       "Processes":  1,
+                       "WorkingSetMB":  103,
+                       "PrivateMB":  106,
+                       "CpuSeconds":  0.81,
+                       "Threads":  18,
+                       "DiskMB":  7.2
+                   }
+               ],
+    "fontcraft_ready_seconds":  [
+                                    1.98,
+                                    1.95,
+                                    1.98
+                                ],
+    "settle_seconds":  20
+}
