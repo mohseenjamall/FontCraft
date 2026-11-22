@@ -16,8 +16,6 @@ jobs:
         include:
           - { os: windows-latest, target: x86_64-pc-windows-msvc, asset: windows-x64.exe, bin: fontcraft.exe }
           - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, asset: linux-x64, bin: fontcraft }
-          - { os: macos-latest, target: aarch64-apple-darwin, asset: macos-arm64, bin: fontcraft }
-          - { os: macos-latest, target: x86_64-apple-darwin, asset: macos-x64, bin: fontcraft }
     steps:
       - uses: actions/checkout@v4
       - name: Check tag matches Cargo.toml version
@@ -53,8 +51,15 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  # FontCraft-<version>-macos.dmg (universal; signed and notarized when the secrets are set).
+  macos:
+    uses: ./.github/workflows/macos-build.yml
+    with:
+      artifact: FontCraft-macos-dmg
+    secrets: inherit
+
   release:
-    needs: build
+    needs: [build, macos]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/download-artifact@v4

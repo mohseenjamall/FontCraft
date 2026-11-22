@@ -376,10 +376,17 @@ impl FontApp {
                         ui.spinner();
                         ui.label(RichText::new("Downloading the update…").color(Color32::WHITE));
                     } else {
-                        let button = egui::Button::new(RichText::new("Update now").color(ACTION).strong()).fill(Color32::WHITE);
+                        let in_place = crate::update::installs_in_place();
+                        let label = if in_place { "Update now" } else { "Download update" };
+                        let button = egui::Button::new(RichText::new(label).color(ACTION).strong()).fill(Color32::WHITE);
                         if ui.add(button).clicked() {
                             self.update_error = None;
-                            self.installing = Some(crate::update::spawn_install(update.clone(), ctx.clone()));
+                            if in_place {
+                                self.installing = Some(crate::update::spawn_install(update.clone(), ctx.clone()));
+                            } else {
+                                // macOS: the signed .app can't swap its own program; the user opens the new .dmg.
+                                self.update_error = crate::update::open(&crate::update::download_url(&update)).err();
+                            }
                         }
                         let page = egui::Button::new(RichText::new("Release page").color(Color32::WHITE)).fill(ACTION);
                         if ui.add(page).clicked() {

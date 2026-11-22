@@ -58,6 +58,7 @@ before returning, so it stays unread. It is the browser's page default, not Font
 | Newer | `vMAJOR.MINOR.PATCH` (leading `v` optional, missing parts 0, `-`/`+` suffix ignored) strictly above `CARGO_PKG_VERSION` | `update::is_newer` |
 | Trusted link | the button only opens URLs starting `https://github.com/mohseenjamall/FontCraft/releases/` with no spaces, quotes, backslashes or `..` | `update::trusted` |
 | Banner | top bar in the accent colour, cannot be closed: "Update required: FontCraft <version> is available. Please update now." + Download update | `app::update_banner` |
+| macOS install | never replaces itself (inside a signed `FontCraft.app` that would break the signature); the banner's **Download update** opens `…/releases/download/v<version>/FontCraft-<version>-macos.dmg` | `update::installs_in_place`, `update::download_url` |
 | No answer | offline, blocked, no curl, private repo (404) → no banner, no error | `update::check` |
 | Checks | `--screenshot` runs skip the network unless `FONTCRAFT_LATEST=<tag>` stands in for GitHub's answer | `main.rs` |
 

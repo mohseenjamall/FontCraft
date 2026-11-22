@@ -1,0 +1,125 @@
+# Builds FontCraft-<version>-macos.dmg: one universal (Apple Silicon + Intel) FontCraft.app,
+# signed and notarized when the signing secrets exist, otherwise unsigned with a warning.
+# Used by release.yml and mac-test-build.yml (call it with `secrets: inherit`).
+name: macOS dmg
+
+on:
+  workflow_call:
+    inputs:
+      artifact:
+        description: Name of the uploaded artifact
+        type: string
+        required: true
+      retention-days:
+        type: number
+        required: false
+        default: 7
+
+jobs:
+  dmg:
+    runs-on: macos-latest
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - name: Read the version
+        run: |
+          cargo_v=$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -n1 | tr -d '\r')
+          echo "VERSION=${cargo_v}" >> "$GITHUB_ENV"
+      - name: Build both architectures
+        run: |
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+      - name: Make one universal binary and FontCraft.app
+        run: |
+          mkdir -p dist
+          lipo -create -output dist/fontcraft \
+            target/aarch64-apple-darwin/release/fontcraft \
+            target/x86_64-apple-darwin/release/fontcraft
+          lipo -info dist/fontcraft
+          bash scripts/macos/bundle.sh "$VERSION" dist/fontcraft dist
+      - name: Which signing secrets are set
+        id: secrets
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          sign=false notarize=false
+          if [ -n "$MACOS_CERTIFICATE" ] && [ -n "$MACOS_CERTIFICATE_PASSWORD" ] && [ -n "$MACOS_SIGN_IDENTITY" ]; then
+            sign=true
+            if [ -n "$APPLE_ID" ] && [ -n "$APPLE_TEAM_ID" ] && [ -n "$APPLE_APP_PASSWORD" ]; then
+              notarize=true
+            fi
+          fi
+          echo "sign=$sign" >> "$GITHUB_OUTPUT"
+          echo "notarize=$notarize" >> "$GITHUB_OUTPUT"
+          if [ "$sign" != true ]; then
+            echo "::warning::macOS signing secrets are not set: building an UNSIGNED dmg (macOS will block it on other Macs)."
+          elif [ "$notarize" != true ]; then
+            echo "::warning::Apple notarization secrets are not set: the dmg is signed but NOT notarized (Gatekeeper will warn)."
+          fi
+      - name: Import the Developer ID certificate into a temporary keychain
+        if: steps.secrets.outputs.sign == 'true'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/fontcraft-signing.keychain-db"
+          keychain_password=$(openssl rand -base64 24)
+          echo "::add-mask::$keychain_password"
+          echo "KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          printf '%s' "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" > /dev/null
+          # Put it on the search list next to the existing keychains so codesign finds the identity.
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+      - name: Sign FontCraft.app
+        if: steps.secrets.outputs.sign == 'true'
+        env:
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: |
+          codesign --force --options runtime --timestamp --sign "$MACOS_SIGN_IDENTITY" dist/FontCraft.app
+          codesign --verify --strict --verbose=2 dist/FontCraft.app
+      - name: Make the dmg
+        run: bash scripts/macos/make-dmg.sh dist/FontCraft.app "dist/FontCraft-${VERSION}-macos.dmg"
+      - name: Sign the dmg
+        if: steps.secrets.outputs.sign == 'true'
+        env:
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: codesign --force --timestamp --sign "$MACOS_SIGN_IDENTITY" "dist/FontCraft-${VERSION}-macos.dmg"
+      - name: Notarize and staple the dmg
+        if: steps.secrets.outputs.notarize == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          dmg="dist/FontCraft-${VERSION}-macos.dmg"
+          xcrun notarytool submit "$dmg" --wait --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
+          # Fails unless Apple accepted the submission.
+          xcrun stapler staple "$dmg"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+      - name: Delete the temporary keychain
+        if: always() && steps.secrets.outputs.sign == 'true'
+        run: |
+          rm -f "$RUNNER_TEMP/cert.p12"
+          if [ -n "${KEYCHAIN:-}" ]; then security delete-keychain "$KEYCHAIN" || true; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact }}
+          path: dist/FontCraft-*-macos.dmg
+          retention-days: ${{ inputs.retention-days }}
+          if-no-files-found: error

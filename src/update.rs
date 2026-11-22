@@ -92,13 +92,13 @@ pub fn spawn_check(ctx: egui::Context) -> Receiver<Update> {
 
 const DOWNLOADS: &str = "https://github.com/mohseenjamall/FontCraft/releases/download/";
 
-/// The program file every release must attach for this OS, e.g. `FontCraft-1.2.0-windows-x64.exe`,
-/// `FontCraft-1.2.0-linux-x64`, `FontCraft-1.2.0-macos-arm64` / `-macos-x64`.
+/// The file every release must attach for this OS, e.g. `FontCraft-1.2.0-windows-x64.exe`,
+/// `FontCraft-1.2.0-linux-x64`, `FontCraft-1.2.0-macos.dmg` (one universal, signed disk image).
 fn asset_name(version: &str) -> String {
     let platform = if cfg!(windows) {
         "windows-x64.exe"
     } else if cfg!(target_os = "macos") {
-        if cfg!(target_arch = "aarch64") { "macos-arm64" } else { "macos-x64" }
+        "macos.dmg"
     } else if cfg!(target_arch = "x86_64") {
         "linux-x64"
     } else {
@@ -173,6 +173,17 @@ fn install_in(u: &Update, dir: &std::path::Path) -> Result<(), String> {
     #[cfg(unix)]
     make_executable(&exe).map_err(|e| format!("couldn't make the download runnable: {e}"))?;
     self_replace::self_replace(&exe).map_err(|e| format!("couldn't replace FontCraft (is it in a protected folder?): {e}"))
+}
+
+/// False on macOS: the program lives inside a signed FontCraft.app, and swapping it would break the
+/// signature so the app no longer opens. There the banner opens the new .dmg instead (`download_url`).
+pub fn installs_in_place() -> bool {
+    !cfg!(target_os = "macos")
+}
+
+/// Where this OS's file for `u` is downloaded from; a release page, so `open` accepts it.
+pub fn download_url(u: &Update) -> String {
+    format!("{DOWNLOADS}v{}/{}", u.version, asset_name(&u.version))
 }
 
 /// Installs in the background; the result arrives on the receiver and the window repaints.
@@ -284,14 +295,27 @@ mod tests {
     fn asset_name_matches_this_os() {
         #[cfg(windows)]
         assert_eq!(asset_name("1.2.0"), "FontCraft-1.2.0-windows-x64.exe");
-        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-        assert_eq!(asset_name("1.2.0"), "FontCraft-1.2.0-macos-arm64");
-        #[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
-        assert_eq!(asset_name("1.2.0"), "FontCraft-1.2.0-macos-x64");
+        #[cfg(target_os = "macos")]
+        assert_eq!(asset_name("1.2.0"), "FontCraft-1.2.0-macos.dmg");
         #[cfg(all(not(any(windows, target_os = "macos")), target_arch = "x86_64"))]
         assert_eq!(asset_name("1.2.0"), "FontCraft-1.2.0-linux-x64");
         #[cfg(all(not(any(windows, target_os = "macos")), not(target_arch = "x86_64")))]
         assert_eq!(asset_name("1.2.0"), "FontCraft-1.2.0-linux-arm64");
+    }
+
+    #[test]
+    fn replaces_itself_except_inside_a_mac_app_bundle() {
+        #[cfg(target_os = "macos")]
+        assert!(!installs_in_place());
+        #[cfg(not(target_os = "macos"))]
+        assert!(installs_in_place());
+    }
+
+    #[test]
+    fn download_url_is_a_trusted_release_file() {
+        let url = download_url(&Update { version: "1.2.0".into(), url: String::new() });
+        assert_eq!(url, format!("https://github.com/mohseenjamall/FontCraft/releases/download/v1.2.0/{}", asset_name("1.2.0")));
+        assert!(trusted(&url));
     }
 
     #[test]
