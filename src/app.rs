@@ -112,7 +112,7 @@ pub struct FontApp {
 
 impl FontApp {
     pub fn new(ctx: &egui::Context) -> Self {
-        ctx.set_visuals(egui::Visuals::light());
+        crate::theme::apply(ctx);
         crate::fonts::add_system_fallback(ctx);
         let mut sources = scan::system_folders();
         let activated = sources.len();
@@ -251,16 +251,6 @@ impl FontApp {
             })
             .collect()
     }
-}
-
-/// Dark controls for the header and sidebar, with FontBase's accent for selection.
-fn dark_visuals() -> egui::Visuals {
-    let mut v = egui::Visuals::dark();
-    v.override_text_color = Some(TEXT_LIGHT);
-    v.extreme_bg_color = Color32::from_rgb(0x21, 0x21, 0x21);
-    v.selection.bg_fill = ACTION;
-    v.selection.stroke.color = Color32::WHITE;
-    v
 }
 
 /// How to draw a sample: in the face itself, or dimmed in the fallback font when the face lacks a letter.
@@ -405,7 +395,7 @@ impl FontApp {
             .frame(egui::Frame::NONE.fill(HEADER_BG).inner_margin(egui::Margin::symmetric(16, 10)))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    *ui.visuals_mut() = dark_visuals();
+                    *ui.visuals_mut() = crate::theme::chrome_visuals();
                     let width = ui.available_width() * 0.5;
                     ui.add(egui::TextEdit::singleline(&mut self.text).hint_text("Type something to preview…").desired_width(width));
                     ui.add_space(12.0);
@@ -426,7 +416,7 @@ impl FontApp {
             .exact_size(220.0)
             .frame(egui::Frame::NONE.fill(SIDE_BG).inner_margin(egui::Margin::symmetric(12, 14)))
             .show(ui, |ui| {
-                *ui.visuals_mut() = dark_visuals();
+                *ui.visuals_mut() = crate::theme::chrome_visuals();
                 ui.label(RichText::new("FONTS").size(11.0).color(Color32::GRAY));
                 ui.add_space(6.0);
                 let all = format!("All fonts  {}", self.families.len());

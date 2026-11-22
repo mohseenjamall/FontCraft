@@ -1,5 +1,5 @@
 //! Design tokens. The only file that builds colors from raw RGB.
-use eframe::egui::Color32;
+use eframe::egui::{self, Color32};
 
 pub mod color {
     use super::Color32;
@@ -68,6 +68,117 @@ pub fn contrast(a: Color32, b: Color32) -> f32 {
     (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
 }
 
+/// Archivo Medium, for fixed English labels only.
+pub fn medium() -> egui::FontFamily {
+    egui::FontFamily::Name("ui-medium".into())
+}
+
+/// IBM Plex Mono.
+pub fn mono() -> egui::FontFamily {
+    egui::FontFamily::Name("ui-mono".into())
+}
+
+/// Registers the UI faces and applies the design system. Call once, at startup.
+pub fn apply(ctx: &egui::Context) {
+    register_fonts(ctx);
+    ctx.all_styles_mut(|style| {
+        style.text_styles = text_styles();
+        style.spacing = spacing();
+        style.visuals = paper_visuals();
+    });
+}
+
+fn register_fonts(ctx: &egui::Context) {
+    let inserts: [(&str, &'static [u8], egui::FontFamily); 3] = [
+        ("Archivo", include_bytes!("../assets/fonts/Archivo-Regular.ttf") as &[u8], egui::FontFamily::Proportional),
+        ("ui-medium", include_bytes!("../assets/fonts/Archivo-Medium.ttf"), medium()),
+        ("ui-mono", include_bytes!("../assets/fonts/PlexMono-Regular.ttf"), mono()),
+    ];
+    for (name, bytes, family) in inserts {
+        let family = egui::InsertFontFamily { family, priority: egui::FontPriority::Highest };
+        ctx.add_font(egui::FontInsert::new(name, egui::FontData::from_static(bytes), vec![family]));
+    }
+}
+
+fn text_styles() -> std::collections::BTreeMap<egui::TextStyle, egui::FontId> {
+    use egui::TextStyle::{Body, Button, Heading, Monospace, Small};
+    [
+        (Small, egui::FontId::proportional(size::META)),
+        (Body, egui::FontId::proportional(size::BODY)),
+        (Button, egui::FontId::proportional(size::BODY)),
+        (Heading, egui::FontId::proportional(size::DETAIL)),
+        (Monospace, egui::FontId::new(size::BODY, mono())),
+    ]
+    .into()
+}
+
+fn spacing() -> egui::Spacing {
+    let mut s = egui::Spacing::default();
+    s.item_spacing = egui::vec2(space::S, space::XS);
+    s.button_padding = egui::vec2(space::M, space::XS);
+    s.menu_margin = egui::Margin::same(space::S as i8);
+    s.window_margin = egui::Margin::same(space::M as i8);
+    s.indent = space::L;
+    s.icon_spacing = space::XS;
+    s
+}
+
+fn widget(state: &mut egui::style::WidgetVisuals, bg: Color32, line: Color32, text: Color32) {
+    state.bg_fill = bg;
+    state.weak_bg_fill = bg;
+    state.bg_stroke = egui::Stroke::new(1.0, line);
+    state.fg_stroke = egui::Stroke::new(1.0, text);
+    state.corner_radius = egui::CornerRadius::same(radius::CONTROL as u8);
+    state.expansion = 0.0;
+}
+
+fn widgets(base: Color32, fill: Color32, hover: Color32, pressed: Color32, line: Color32, text: Color32) -> egui::style::Widgets {
+    let mut w = egui::style::Widgets::default();
+    widget(&mut w.noninteractive, base, line, text);
+    widget(&mut w.inactive, fill, line, text);
+    widget(&mut w.hovered, hover, line, text);
+    widget(&mut w.active, pressed, line, text);
+    widget(&mut w.open, hover, line, text);
+    w
+}
+
+fn paper_visuals() -> egui::Visuals {
+    let mut v = egui::Visuals::light();
+    v.override_text_color = Some(color::INK);
+    v.panel_fill = color::PAPER;
+    v.window_fill = color::CARD;
+    v.faint_bg_color = color::CANVAS_HOVER;
+    v.extreme_bg_color = color::CARD;
+    v.code_bg_color = color::CANVAS_HOVER;
+    v.window_stroke = egui::Stroke::new(1.0, color::CANVAS_LINE);
+    v.selection.bg_fill = color::COBALT;
+    v.selection.stroke = egui::Stroke::new(1.0, Color32::WHITE);
+    v.hyperlink_color = color::COBALT;
+    v.window_shadow = egui::Shadow::NONE;
+    v.popup_shadow = egui::Shadow::NONE;
+    v.widgets = widgets(color::PAPER, color::CARD, color::CANVAS_HOVER, color::SELECTED, color::CANVAS_LINE, color::INK);
+    v
+}
+
+/// Dark controls for the header and sidebar, with the accent for selection.
+pub fn chrome_visuals() -> egui::Visuals {
+    let mut v = egui::Visuals::dark();
+    v.override_text_color = Some(color::CHROME_TEXT);
+    v.panel_fill = color::SIDEBAR;
+    v.window_fill = color::HEADER;
+    v.faint_bg_color = color::CHROME_HOVER;
+    v.extreme_bg_color = color::HEADER;
+    v.code_bg_color = color::CHROME_HOVER;
+    v.window_stroke = egui::Stroke::new(1.0, color::CHROME_LINE);
+    v.selection.bg_fill = color::ACCENT_ON_DARK;
+    v.selection.stroke = egui::Stroke::new(1.0, Color32::WHITE);
+    v.hyperlink_color = color::ACCENT_ON_DARK;
+    v.window_shadow = egui::Shadow::NONE;
+    v.popup_shadow = egui::Shadow::NONE;
+    v.widgets = widgets(color::HEADER, color::CHROME_RAISED, color::CHROME_HOVER, color::CHROME_RAISED, color::CHROME_LINE, color::CHROME_TEXT);
+    v
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,5 +197,24 @@ mod tests {
     #[test] fn hairlines_are_visible_but_quiet() {
         use color::*;
         assert!(contrast(CHROME_LINE, SIDEBAR) >= 1.2 && contrast(CANVAS_LINE, PAPER) >= 1.1);
+    }
+    #[test] fn apply_sets_the_text_scale() {
+        let ctx = egui::Context::default();
+        apply(&ctx);
+        let s = ctx.global_style();
+        assert_eq!(s.text_styles[&egui::TextStyle::Body].size, size::BODY);
+        assert_eq!(s.text_styles[&egui::TextStyle::Heading].size, size::DETAIL);
+        assert_eq!(s.text_styles[&egui::TextStyle::Small].size, size::META);
+    }
+    #[test] fn arabic_still_reaches_a_fallback_font() {
+        // only meaningful where the OS has an Arabic font to borrow
+        if !cfg!(windows) { return; }
+        let ctx = egui::Context::default();
+        apply(&ctx);
+        crate::fonts::add_system_fallback(&ctx);
+        let mut out = ctx.run_pass(Default::default(), |_| {}); // fonts take effect on the next frame
+        out.textures_delta.clear();
+        let ok = ctx.fonts_mut(|f| f.has_glyphs(&egui::FontId::proportional(13.0), "مرحبا"));
+        assert!(ok);
     }
 }
