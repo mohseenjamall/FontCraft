@@ -33,9 +33,96 @@ pub fn script_of(has: impl Fn(char) -> bool) -> u8 {
     SCRIPTS.iter().position(|(c, _)| has(*c)).unwrap_or(0) as u8
 }
 
+/// Bit of the Latin script ("English") and of the Arabic script in a script mask.
+#[allow(dead_code)] // used by the filters in the next task
+pub const LATIN: u16 = 1 << 0;
+#[allow(dead_code)] // used by the filters in the next task
+pub const ARABIC: u16 = 1 << 4;
+
+/// What people call each script, in [`SCRIPTS`] order (bit 0 is Latin, shown as "English").
+#[allow(dead_code)] // used by the filters in the next task
+const NAMES: [&str; 16] = [
+    "English", "Chinese", "Japanese", "Devanagari", "Arabic", "Cyrillic", "Greek", "Khmer", "Lao", "Thai", "Tamil", "Burmese",
+    "Bengali", "Hebrew", "Armenian", "Georgian",
+];
+
+/// Every script a font supports: bit `i` is set when it has the test letter of `SCRIPTS[i]`.
+#[allow(dead_code)] // used by the filters in the next task
+pub fn script_mask(has: impl Fn(char) -> bool) -> u16 {
+    SCRIPTS.iter().enumerate().filter(|(_, (c, _))| has(*c)).fold(0, |mask, (i, _)| mask | 1 << i)
+}
+
+/// Index into [`SCRIPTS`] of the script a letter belongs to, by Unicode block.
+#[allow(dead_code)] // used by the filters in the next task
+fn script_index(c: char) -> Option<usize> {
+    Some(match c as u32 {
+        _ if c.is_ascii_alphabetic() => 0,
+        0x00C0..=0x024F | 0x1E00..=0x1EFF => 0,
+        0x0370..=0x03FF => 6,
+        0x0400..=0x04FF => 5,
+        0x0530..=0x058F => 14,
+        0x0590..=0x05FF => 13,
+        0x0600..=0x06FF | 0x0750..=0x077F | 0xFB50..=0xFDFF | 0xFE70..=0xFEFF => 4,
+        0x0900..=0x097F => 3,
+        0x0980..=0x09FF => 12,
+        0x0B80..=0x0BFF => 10,
+        0x0E00..=0x0E7F => 9,
+        0x0E80..=0x0EFF => 8,
+        0x1000..=0x109F => 11,
+        0x10A0..=0x10FF => 15,
+        0x1780..=0x17FF => 7,
+        0x3040..=0x30FF => 2,
+        0x4E00..=0x9FFF => 1,
+        _ => return None,
+    })
+}
+
+/// The scripts of the letters in `text`. Digits, spaces, punctuation and symbols add nothing.
+#[allow(dead_code)] // used by the filters in the next task
+pub fn scripts_in(text: &str) -> u16 {
+    text.chars().filter(|c| c.is_alphabetic()).filter_map(script_index).fold(0, |mask, i| mask | 1 << i)
+}
+
+/// "Arabic", "Arabic and English", "Arabic, English and Hebrew"; empty for no script.
+#[allow(dead_code)] // used by the filters in the next task
+pub fn script_names(mask: u16) -> String {
+    let names: Vec<&str> = NAMES.iter().enumerate().filter(|(i, _)| mask & (1 << i) != 0).map(|(_, n)| *n).collect();
+    match names.as_slice() {
+        [] => String::new(),
+        [one] => (*one).to_owned(),
+        [init @ .., last] => format!("{} and {last}", init.join(", ")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mask_has_a_bit_per_supported_script() {
+        assert_eq!(script_mask(|c| c == 'A' || c == 'ب'), LATIN | ARABIC);
+        assert_eq!(script_mask(|_| false), 0);
+        assert_eq!(script_mask(|_| true), 0xFFFF);
+    }
+
+    #[test]
+    fn text_scripts_follow_the_letters_only() {
+        assert_eq!(scripts_in("Hello"), LATIN);
+        assert_eq!(scripts_in("عبد الرحمن"), ARABIC);
+        assert_eq!(scripts_in("Hello عبد"), LATIN | ARABIC);
+        assert_eq!(scripts_in("Café"), LATIN);
+        for s in ["", "   ", "123 -- !?", "😀", "١٢٣"] {
+            assert_eq!(scripts_in(s), 0, "{s:?}");
+        }
+    }
+
+    #[test]
+    fn names_read_naturally() {
+        assert_eq!(script_names(ARABIC), "Arabic");
+        assert_eq!(script_names(LATIN | ARABIC), "English and Arabic"); // names follow bit order
+        assert_eq!(script_names(LATIN | ARABIC | 1 << 13), "English, Arabic and Hebrew");
+        assert_eq!(script_names(0), "");
+    }
 
     #[test]
     fn card_glyph_per_script() {

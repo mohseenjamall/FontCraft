@@ -13,6 +13,10 @@ pub struct Face {
     pub italic: bool,
     /// Index into samples::SCRIPTS: the writing system its default sample uses.
     pub script: u8,
+    /// Every script the face supports (bit `i` = `samples::SCRIPTS[i]`), for collections and the preview filter.
+    pub scripts: u16,
+    /// Has an `fvar` table (adjustable weight, width and so on).
+    pub variable: bool,
     pub source: usize,
 }
 
@@ -103,6 +107,8 @@ fn faces_in_file(path: &Path, source: usize) -> Vec<Face> {
                 weight: face.weight().to_number(),
                 italic: face.is_italic(),
                 script: crate::samples::script_of(|c| face.glyph_index(c).is_some_and(|g| g.0 != 0)),
+                scripts: crate::samples::script_mask(|c| face.glyph_index(c).is_some_and(|g| g.0 != 0)),
+                variable: face.is_variable(),
                 source,
             })
         })

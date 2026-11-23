@@ -20,12 +20,30 @@ const SIZE_STEP: f64 = 2.0;
 const SIZE_DEFAULT: f32 = 42.0;
 const WATERFALL: [f32; 4] = [72.0, 48.0, 24.0, 14.0];
 
+#[allow(dead_code)] // scripts, variable and weight_count are read by the collections in the next task
 pub struct Family {
     pub name: String,
     pub faces: Vec<Face>,
+    /// Scripts any face supports, whether any face is variable, and how many different weights it has.
+    pub scripts: u16,
+    pub variable: bool,
+    pub weight_count: usize,
 }
 
 impl Family {
+    pub fn new(name: String, faces: Vec<Face>) -> Self {
+        let mut weights: Vec<u16> = faces.iter().map(|f| f.weight).collect();
+        weights.sort_unstable();
+        weights.dedup();
+        Self {
+            name,
+            scripts: faces.iter().fold(0, |m, f| m | f.scripts),
+            variable: faces.iter().any(|f| f.variable),
+            weight_count: weights.len(),
+            faces,
+        }
+    }
+
     /// The face shown in the list: closest to Regular (400, upright).
     fn main_face(&self) -> &Face {
         self.faces
@@ -371,19 +389,17 @@ impl Scans {
 
 /// Groups faces into families, sorted by name; styles ordered upright-first by weight.
 pub fn group(faces: &[Face]) -> Vec<Family> {
-    let mut map: std::collections::BTreeMap<String, Family> = Default::default();
+    let mut map: std::collections::BTreeMap<String, (String, Vec<Face>)> = Default::default();
     for f in faces {
-        map.entry(f.family.to_lowercase())
-            .or_insert_with(|| Family { name: f.family.clone(), faces: Vec::new() })
-            .faces
-            .push(f.clone());
+        map.entry(f.family.to_lowercase()).or_insert_with(|| (f.family.clone(), Vec::new())).1.push(f.clone());
     }
-    let mut out: Vec<Family> = map.into_values().collect();
-    for fam in &mut out {
-        fam.faces.sort_by_key(|f| (f.weight, f.italic));
-        fam.faces.dedup_by(|a, b| a.style == b.style && a.weight == b.weight && a.italic == b.italic);
-    }
-    out
+    map.into_values()
+        .map(|(name, mut faces)| {
+            faces.sort_by_key(|f| (f.weight, f.italic));
+            faces.dedup_by(|a, b| a.style == b.style && a.weight == b.weight && a.italic == b.italic);
+            Family::new(name, faces)
+        })
+        .collect()
 }
 
 impl eframe::App for FontApp {
@@ -867,7 +883,7 @@ mod tests {
     use super::*;
 
     fn face(family: &str, style: &str, weight: u16, italic: bool) -> Face {
-        Face { path: PathBuf::from(format!("{family}{style}.ttf")), index: 0, family: family.into(), style: style.into(), weight, italic, script: 0, source: 0 }
+        Face { path: PathBuf::from(format!("{family}{style}.ttf")), index: 0, family: family.into(), style: style.into(), weight, italic, script: 0, scripts: crate::samples::LATIN, variable: false, source: 0 }
     }
 
     fn sourced(path: &std::path::Path, family: &str, source: usize) -> Face {
@@ -909,11 +925,24 @@ mod tests {
 
     #[test]
     fn family_files_are_distinct_and_sorted() {
-        let fam = Family {
-            name: "X".into(),
-            faces: vec![sourced("b.ttc".as_ref(), "X", 3), sourced("a.ttf".as_ref(), "X", 3), sourced("b.ttc".as_ref(), "X", 3)],
-        };
+        let fam = Family::new(
+            "X".into(),
+            vec![sourced("b.ttc".as_ref(), "X", 3), sourced("a.ttf".as_ref(), "X", 3), sourced("b.ttc".as_ref(), "X", 3)],
+        );
         assert_eq!(fam.files(), vec![PathBuf::from("a.ttf"), PathBuf::from("b.ttc")]);
+    }
+
+    #[test]
+    fn family_aggregates_scripts_variable_and_weights() {
+        let mut a = face("Mixed", "Regular", 400, false);
+        a.scripts = crate::samples::LATIN | crate::samples::ARABIC;
+        let mut b = face("Mixed", "Bold", 700, false);
+        b.variable = true;
+        let c = face("Mixed", "Italic", 400, true);
+        let fam = &group(&[a, b, c])[0];
+        assert_eq!(fam.scripts, crate::samples::LATIN | crate::samples::ARABIC);
+        assert!(fam.variable);
+        assert_eq!(fam.weight_count, 2); // 400 and 700; the italic repeats 400
     }
 
     #[cfg(windows)]
@@ -955,7 +984,7 @@ mod tests {
     fn user_font_is_on_until_rejected() {
         let user = Path::new("/home/u/.local/share/fonts");
         let links = user.join("FontCraft");
-        let fam = |p: &str| Family { name: "X".into(), faces: vec![sourced(p.as_ref(), "X", 1)] };
+        let fam = |p: &str| Family::new("X".into(), vec![sourced(p.as_ref(), "X", 1)]);
         let (none, off) = (HashSet::new(), HashSet::from([PathBuf::from("/home/u/.local/share/fonts/a.ttf")]));
         let own = fam("/home/u/.local/share/fonts/a.ttf");
         assert!(all_active_in(&none, &none, user, &links, &own));
@@ -991,7 +1020,7 @@ mod tests {
 
     #[test]
     fn is_active_requires_all_files_active() {
-        let fam = Family { name: "X".into(), faces: vec![sourced("a.ttf".as_ref(), "X", 3), sourced("b.ttf".as_ref(), "X", 3)] };
+        let fam = Family::new("X".into(), vec![sourced("a.ttf".as_ref(), "X", 3), sourced("b.ttf".as_ref(), "X", 3)]);
         let mut active = HashSet::from([PathBuf::from("a.ttf")]);
         assert!(!all_active(&active, &HashSet::new(), &fam));
         active.insert(PathBuf::from("b.ttf"));
