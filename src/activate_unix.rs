@@ -101,7 +101,8 @@ fn turn_on_with(user_fonts: &Path, links: &Path, conf: &Path, paths: &[PathBuf])
     check(user_fonts, links, paths)?;
     let (unreject, to_link): (Vec<&PathBuf>, Vec<&PathBuf>) = paths.iter().partition(|p| is_user_font(p, user_fonts, links));
     if let Some(missing) = to_link.iter().find(|p| !p.is_file()) {
-        return Err(format!("{}: file not found", missing.display()));
+        let name = missing.file_name().map_or_else(|| missing.display().to_string(), |n| n.to_string_lossy().into_owned());
+        return Err(format!("{name} was moved or deleted. Rescan or remove its folder."));
     }
     let mut changed = if unreject.is_empty() { 0 } else { edit_conf(conf, |rules| unreject.iter().filter(|p| rules.remove(**p)).count())? };
     if !to_link.is_empty() {

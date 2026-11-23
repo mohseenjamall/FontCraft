@@ -27,7 +27,7 @@ Version 1.2.0
 - **Your folders are remembered.** Folders you add with **+ Add folder** come back the next time you
   open FontCraft.
 - **Update notice.** Each time FontCraft starts it checks, in the background, whether a newer
-  release is on GitHub. If there is one, a purple bar across the top says "Update required" with a
+  release is on GitHub. If there is one, a cobalt bar across the top says "FontCraft <version> is available." with a
   **Download update** button that opens the release page. Offline or blocked: nothing is shown and
   the app works as usual.
 - **Fast.** Fonts are scanned on several threads at once, and only the fonts on screen are loaded.

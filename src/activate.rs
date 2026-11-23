@@ -88,6 +88,11 @@ mod imp {
     use super::{OWN_SUFFIX, is_system_font, marker, norm, system_error};
     use crate::disabled::{Entry, Saved, data_path};
 
+    /// Just the file name, for messages people read.
+    fn file_name(p: &Path) -> String {
+        p.file_name().map_or_else(|| p.display().to_string(), |n| n.to_string_lossy().into_owned())
+    }
+
     fn err(what: &str, path: &Path, e: impl std::fmt::Display) -> String {
         format!("{what} {}: {e}", path.display())
     }
@@ -183,7 +188,7 @@ mod imp {
             return Err(system_error(p));
         }
         if let Some(missing) = paths.iter().find(|p| !p.is_file()) {
-            return Err(format!("{}: file not found", missing.display()));
+            return Err(format!("{} was moved or deleted. Rescan or remove its folder.", file_name(missing)));
         }
         let (k, _) = RegKey::predef(HKEY_CURRENT_USER).create_subkey(key).map_err(|e| format!("can't open the font list: {e}"))?;
         let mut saved = Saved::load(store);
@@ -198,7 +203,7 @@ mod imp {
             }
             // SAFETY: NUL-terminated buffer that outlives the call.
             if unsafe { AddFontResourceW(wide(path).as_ptr()) } == 0 {
-                return Err(format!("{}: Windows couldn't load this font", path.display()));
+                return Err(format!("Windows couldn't load {}. The file may be damaged or blocked; try another copy.", file_name(path)));
             }
             for e in &entries {
                 let vtype = reg_type(e.vtype).ok_or_else(|| err("unknown saved value type for", path, e.vtype))?;
@@ -234,14 +239,14 @@ mod imp {
     pub fn activate_in(key: &str, paths: &[PathBuf]) -> Result<usize, String> {
         // Check every file first so a bad one leaves nothing half done.
         if let Some(missing) = paths.iter().find(|p| !p.is_file()) {
-            return Err(format!("{}: file not found", missing.display()));
+            return Err(format!("{} was moved or deleted. Rescan or remove its folder.", file_name(missing)));
         }
         let mut added = 0;
         let mut result = Ok(());
         for path in paths.iter().filter(|p| !is_owned(key, p)) {
             // SAFETY: `wide` returns a NUL-terminated UTF-16 buffer that outlives the call.
             if unsafe { AddFontResourceW(wide(path).as_ptr()) } == 0 {
-                result = Err(format!("{}: Windows couldn't load this font", path.display()));
+                result = Err(format!("Windows couldn't load {}. The file may be damaged or blocked; try another copy.", file_name(path)));
                 break;
             }
             if let Err(e) = write_marker(key, path) {

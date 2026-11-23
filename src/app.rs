@@ -527,7 +527,7 @@ impl FontApp {
     /// Topmost bar while a newer release exists; it can't be closed, only acted on.
     fn update_banner(&mut self, ui: &mut egui::Ui) {
         let Some(update) = self.update.clone() else { return };
-        let (text, url) = (format!("Update required: FontCraft {} is available. Please update now.", update.version), update.url.clone());
+        let (text, url) = (format!("FontCraft {} is available.", update.version), update.url.clone());
         let ctx = ui.ctx().clone();
         if let Some(done) = self.installing.as_ref().and_then(|rx| rx.try_recv().ok()) {
             self.installing = None;
@@ -564,7 +564,7 @@ impl FontApp {
                                 self.update_error = crate::update::open(&crate::update::download_url(&update)).err();
                             }
                         }
-                        let page = egui::Button::new(RichText::new("Release page").color(Color32::WHITE))
+                        let page = egui::Button::new(RichText::new("What's new").color(Color32::WHITE))
                             .fill(Color32::TRANSPARENT)
                             .stroke(egui::Stroke::new(1.0, Color32::WHITE))
                             .corner_radius(theme::radius::CONTROL)
@@ -995,15 +995,15 @@ impl FontApp {
                     if on && can {
                         ui.label(RichText::new("On for all apps").size(theme::size::SECONDARY).color(color::COBALT));
                     } else if saved_off {
-                        ui.label(RichText::new("Off: its settings are saved").size(theme::size::SECONDARY).color(color::INK_MUTED));
+                        ui.label(RichText::new("Off. Turn on restores it as it was.").size(theme::size::SECONDARY).color(color::INK_MUTED));
                     }
                 });
                 if by_fontbase && can {
-                    ui.label(RichText::new("FontBase قد يعرض هذا الخط كمفعّل حتى تفتحه فيه").size(11.0).color(color::INK_MUTED));
+                    ui.label(RichText::new("FontBase may still show this font as on until you open it there.").size(11.0).color(color::INK_MUTED));
                 }
                 if !shares.is_empty() && can {
                     ui.label(
-                        RichText::new(format!("This file also holds: {} (they change together)", shares.join(", ")))
+                        RichText::new(format!("Also in this file: {}. They turn on and off together.", shares.join(", ")))
                             .size(11.0)
                             .color(color::INK_MUTED),
                     );
