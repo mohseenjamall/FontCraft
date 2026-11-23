@@ -140,7 +140,7 @@ impl FontApp {
             size: SIZE_DEFAULT,
             search: String::new(),
             source: None,
-            view: grid::View::List,
+            view: crate::store::load_view(),
             selected: None,
             selected_face: 0,
             active: activate::read_active(&activate::key()),
@@ -468,18 +468,36 @@ impl FontApp {
             .show(ui, |ui| {
                 ui.horizontal_centered(|ui| {
                     *ui.visuals_mut() = theme::chrome_visuals();
+                    let in_list = self.view == grid::View::List;
                     let width = ui.available_width() * 0.5;
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.text)
-                            .hint_text("Type something to preview…")
-                            .desired_width(width)
-                            .min_size(egui::vec2(0.0, 28.0))
-                            .align(egui::Align2::LEFT_CENTER)
-                            .background_color(color::CHROME_RAISED),
-                    );
+                    // The preview text and the size only drive the list, so they dim in the grid.
+                    let preview = ui
+                        .add_enabled_ui(in_list, |ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.text)
+                                    .hint_text("Type something to preview…")
+                                    .desired_width(width)
+                                    .min_size(egui::vec2(0.0, 28.0))
+                                    .align(egui::Align2::LEFT_CENTER)
+                                    .background_color(color::CHROME_RAISED),
+                            )
+                        })
+                        .inner;
+                    preview.on_disabled_hover_text("Used in the list view");
                     ui.add_space(theme::space::M);
-                    ui.label(RichText::new("Size").color(color::CHROME_TEXT_DIM));
-                    widgets::ruler_slider(ui, &mut self.size, SIZE_MIN..=SIZE_MAX, SIZE_STEP);
+                    let size = ui
+                        .add_enabled_ui(in_list, |ui| {
+                            ui.label(RichText::new("Size").color(color::CHROME_TEXT_DIM));
+                            widgets::ruler_slider(ui, &mut self.size, SIZE_MIN..=SIZE_MAX, SIZE_STEP)
+                        })
+                        .inner;
+                    size.on_disabled_hover_text("Used in the list view");
+                    ui.add_space(theme::space::M);
+                    if let Some(i) = widgets::segmented(ui, &["List", "Grid"], if in_list { 0 } else { 1 }) {
+                        let view = if i == 1 { grid::View::Grid } else { grid::View::List };
+                        self.set_view(view);
+                        crate::store::save_view(view);
+                    }
                     ui.add_space(theme::space::M);
                     ui.add(
                         egui::TextEdit::singleline(&mut self.search)

@@ -77,6 +77,46 @@ fn button(
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
+/// A two-or-more segment switch, 28 px high with a hairline track: the chosen segment sits on
+/// `CHROME_RAISED`, the others are dim and lift on hover. Returns the segment clicked this frame.
+pub fn segmented(ui: &mut egui::Ui, labels: &[&str], selected: usize) -> Option<usize> {
+    const HEIGHT: f32 = 28.0;
+    let font = FontId::new(size::BODY, theme::medium());
+    // Placeholder colour, so the same galley can be painted as chosen or dim.
+    let galleys: Vec<std::sync::Arc<egui::Galley>> = labels
+        .iter()
+        .map(|label| ui.painter().layout_no_wrap((*label).to_owned(), font.clone(), Color32::PLACEHOLDER))
+        .collect();
+    let widths: Vec<f32> = galleys.iter().map(|g| (g.size().x + 2.0 * space::M).max(HEIGHT)).collect();
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(widths.iter().sum(), HEIGHT), egui::Sense::click());
+    let painter = ui.painter();
+    painter.rect(rect, radius::CONTROL, Color32::TRANSPARENT, Stroke::new(1.0, color::CHROME_LINE), egui::StrokeKind::Inside);
+    let pointer = response.hover_pos();
+    let mut left = rect.left();
+    let mut clicked = None;
+    for (i, galley) in galleys.into_iter().enumerate() {
+        let seg = egui::Rect::from_min_size(egui::pos2(left, rect.top()), egui::vec2(widths[i], HEIGHT));
+        left += widths[i];
+        let inner = seg.shrink(2.0);
+        let hovered = pointer.is_some_and(|p| seg.contains(p));
+        let chosen = i == selected;
+        if chosen {
+            painter.rect(inner, radius::CONTROL, color::CHROME_RAISED, Stroke::new(1.0, color::CHROME_LINE), egui::StrokeKind::Inside);
+        } else if hovered {
+            painter.rect_filled(inner, radius::CONTROL, color::CHROME_HOVER);
+        }
+        let text = if chosen { color::CHROME_TEXT } else { color::CHROME_TEXT_DIM };
+        painter.galley(seg.center() - galley.size() / 2.0, galley, text);
+        if hovered && response.clicked() {
+            clicked = Some(i);
+        }
+    }
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    clicked
+}
+
 /// Small heading above a group of rows: 13 px medium, secondary colour.
 pub fn section_label(ui: &mut egui::Ui, text: &str) {
     ui.label(RichText::new(text).font(FontId::new(size::BODY, theme::medium())).color(color::CHROME_TEXT_DIM));

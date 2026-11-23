@@ -17,7 +17,6 @@ impl View {
     }
 
     /// The stored form, also what `view.txt` holds.
-    #[allow(dead_code)]
     pub fn as_str(self) -> &'static str {
         match self {
             View::List => "list",
