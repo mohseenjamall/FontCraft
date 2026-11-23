@@ -5,6 +5,7 @@ mod activate_unix;
 mod app;
 mod disabled;
 mod fonts;
+mod grid;
 mod platform;
 mod samples;
 mod scan;

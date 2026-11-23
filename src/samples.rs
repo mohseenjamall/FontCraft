@@ -19,6 +19,17 @@ pub const SCRIPTS: [(char, &str); 16] = [
     ('Ⴀ', "მინას ვჭამ და არა მტკივა"),
 ];
 
+/// One glyph per script in [`SCRIPTS`] order, for the grid cards: "Aa" for Latin, a single
+/// fitting letter elsewhere (the Arabic card uses ain rather than the test letter).
+#[allow(dead_code)] // the grid cards (next tasks) read these
+const GLYPHS: [&str; 16] = ["Aa", "我", "私", "अ", "ع", "и", "ξ", "ក", "ກ", "ข", "அ", "က", "অ", "א", "Ա", "Ⴀ"];
+
+/// The glyph pair shown on a grid card for a script index; out of range falls back to Latin.
+#[allow(dead_code)]
+pub fn card_glyph(script: u8) -> &'static str {
+    GLYPHS.get(script as usize).copied().unwrap_or(GLYPHS[0])
+}
+
 /// Index into [`SCRIPTS`] for a font, given a "does it have this letter" check. Latin if none match.
 pub fn script_of(has: impl Fn(char) -> bool) -> u8 {
     SCRIPTS.iter().position(|(c, _)| has(*c)).unwrap_or(0) as u8
@@ -27,6 +38,17 @@ pub fn script_of(has: impl Fn(char) -> bool) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn card_glyph_per_script() {
+        assert_eq!(SCRIPTS.len(), 16);
+        for i in 0..16u8 {
+            assert!(!card_glyph(i).is_empty());
+        }
+        assert_eq!(card_glyph(0), "Aa");
+        assert_eq!(card_glyph(4), "\u{639}"); // Arabic ain
+        assert_eq!(card_glyph(200), "Aa"); // out of range falls back to Latin
+    }
 
     #[test]
     fn first_supported_script_wins() {
