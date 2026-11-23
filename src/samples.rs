@@ -34,9 +34,7 @@ pub fn script_of(has: impl Fn(char) -> bool) -> u8 {
 }
 
 /// Bit of the Latin script ("English") and of the Arabic script in a script mask.
-#[allow(dead_code)] // used by the filters in the next task
 pub const LATIN: u16 = 1 << 0;
-#[allow(dead_code)] // used by the filters in the next task
 pub const ARABIC: u16 = 1 << 4;
 
 /// What people call each script, in [`SCRIPTS`] order (bit 0 is Latin, shown as "English").
@@ -47,13 +45,11 @@ const NAMES: [&str; 16] = [
 ];
 
 /// Every script a font supports: bit `i` is set when it has the test letter of `SCRIPTS[i]`.
-#[allow(dead_code)] // used by the filters in the next task
 pub fn script_mask(has: impl Fn(char) -> bool) -> u16 {
     SCRIPTS.iter().enumerate().filter(|(_, (c, _))| has(*c)).fold(0, |mask, (i, _)| mask | 1 << i)
 }
 
 /// Index into [`SCRIPTS`] of the script a letter belongs to, by Unicode block.
-#[allow(dead_code)] // used by the filters in the next task
 fn script_index(c: char) -> Option<usize> {
     Some(match c as u32 {
         _ if c.is_ascii_alphabetic() => 0,
@@ -78,7 +74,6 @@ fn script_index(c: char) -> Option<usize> {
 }
 
 /// The scripts of the letters in `text`. Digits, spaces, punctuation and symbols add nothing.
-#[allow(dead_code)] // used by the filters in the next task
 pub fn scripts_in(text: &str) -> u16 {
     text.chars().filter(|c| c.is_alphabetic()).filter_map(script_index).fold(0, |mask, i| mask | 1 << i)
 }

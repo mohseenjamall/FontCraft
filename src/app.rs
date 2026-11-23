@@ -7,6 +7,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use eframe::egui::{self, Color32, FontId, RichText};
 
 use crate::activate;
+use crate::collections::Collection;
 use crate::fonts::FontLoader;
 use crate::grid;
 use crate::scan::{self, Face};
@@ -20,7 +21,6 @@ const SIZE_STEP: f64 = 2.0;
 const SIZE_DEFAULT: f32 = 42.0;
 const WATERFALL: [f32; 4] = [72.0, 48.0, 24.0, 14.0];
 
-#[allow(dead_code)] // scripts, variable and weight_count are read by the collections in the next task
 pub struct Family {
     pub name: String,
     pub faces: Vec<Face>,
@@ -101,6 +101,10 @@ pub struct FontApp {
     size: f32,
     search: String,
     source: Option<usize>,
+    /// A Library or Collections filter; exclusive with `source`.
+    collection: Option<Collection>,
+    /// Families per [`Collection::ALL`] entry, refreshed when families or the on/off state change.
+    counts: [usize; 5],
     /// Whether the families show as a list or as a grid of cards.
     view: grid::View,
     selected: Option<String>,
@@ -158,6 +162,8 @@ impl FontApp {
             size: SIZE_DEFAULT,
             search: String::new(),
             source: None,
+            collection: None,
+            counts: [0; 5],
             view: crate::store::load_view(),
             selected: None,
             selected_face: 0,
@@ -218,6 +224,7 @@ impl FontApp {
         self.active = activate::read_active(key);
         self.disabled = activate::read_disabled(store);
         self.notice = result.err();
+        self.refresh_counts();
     }
 
     pub fn set_text(&mut self, text: String) {
@@ -227,6 +234,44 @@ impl FontApp {
     /// Shows the families as a list or as a grid of cards.
     pub fn set_view(&mut self, v: grid::View) {
         self.view = v;
+    }
+
+    /// Picks a Library or Collections filter (or clears it); it replaces any chosen folder.
+    pub fn set_collection(&mut self, c: Option<Collection>) {
+        self.collection = c;
+        if c.is_some() {
+            self.source = None;
+        }
+    }
+
+    /// Picks a folder source (or clears it); it replaces any chosen collection.
+    pub fn set_source(&mut self, s: Option<usize>) {
+        self.source = s;
+        if s.is_some() {
+            self.collection = None;
+        }
+    }
+
+    /// Families per collection, as of the last scan result or on/off change.
+    #[allow(dead_code)] // drawn by the sidebar in the next task
+    pub fn collection_counts(&self) -> [usize; 5] {
+        self.counts
+    }
+
+    fn refresh_counts(&mut self) {
+        let mut counts = [0; 5];
+        for fam in &self.families {
+            let on = all_active(&self.active, &self.disabled, fam);
+            for c in Collection::ALL {
+                counts[c.index()] += usize::from(c.contains(fam, on));
+            }
+        }
+        self.counts = counts;
+    }
+
+    /// Scripts the typed preview text needs a font to support (list view only; the grid ignores the text).
+    pub fn text_need(&self) -> u16 {
+        if self.view == grid::View::List { crate::samples::scripts_in(&self.text) } else { 0 }
     }
 
     /// True once every font is listed and every visible preview has its typeface.
@@ -249,6 +294,7 @@ impl FontApp {
         if !new.is_empty() {
             self.faces.extend(new);
             self.families = group(&self.faces);
+            self.refresh_counts();
         }
     }
 
@@ -261,16 +307,21 @@ impl FontApp {
         crate::store::save_folders(&self.sources.iter().skip(self.fixed_sources).map(|(_, p)| p.clone()).collect::<Vec<_>>());
         self.scan.start(vec![(index, dir)]);
         self.scan_done = false;
-        self.source = Some(index);
+        self.set_source(Some(index));
     }
 
     fn visible(&self) -> Vec<usize> {
         let needle = self.search.to_lowercase();
+        let need = self.text_need();
         (0..self.families.len())
             .filter(|&i| {
                 let f = &self.families[i];
                 f.name.to_lowercase().contains(&needle)
                     && self.source.is_none_or(|s| f.faces.iter().any(|x| x.source == s))
+                    && self.collection.is_none_or(|c| {
+                        c.contains(f, c == Collection::TurnedOn && all_active(&self.active, &self.disabled, f))
+                    })
+                    && f.scripts & need == need
             })
             .collect()
     }
@@ -554,12 +605,12 @@ impl FontApp {
                 ui.scope(|ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
                     if source_row(ui, "All fonts", self.families.len(), self.source.is_none()).clicked() {
-                        self.source = None;
+                        self.set_source(None);
                     }
                     for i in 0..self.sources.len() {
                         let count = self.families.iter().filter(|f| f.faces.iter().any(|x| x.source == i)).count();
                         if source_row(ui, &self.sources[i].0, count, self.source == Some(i)).clicked() {
-                            self.source = Some(i);
+                            self.set_source(Some(i));
                         }
                     }
                 });
@@ -905,6 +956,8 @@ mod tests {
                 size: SIZE_DEFAULT,
                 search: String::new(),
                 source: None,
+                collection: None,
+                counts: [0; 5],
                 view: grid::View::List,
                 selected: None,
                 selected_face: 0,
@@ -1098,6 +1151,84 @@ mod tests {
         assert_eq!(grid::visible_range(11, 14, cols, visible.len()), 44..50);
         assert_eq!(grid::visible_range(0, 999, cols, visible.len()), 0..50);
         assert_eq!(grid::visible_range(0, 2, cols, 0), 0..0);
+    }
+
+    fn app_with_scripts() -> FontApp {
+        use crate::samples::{ARABIC, LATIN};
+        let mut ara = face("Ara", "Regular", 400, false);
+        ara.scripts = ARABIC;
+        let mut lat = face("Lat", "Regular", 400, false);
+        lat.scripts = LATIN;
+        let mut mix = face("Mix", "Regular", 400, false);
+        mix.scripts = LATIN | ARABIC;
+        FontApp::for_test(3, vec![ara, lat, mix])
+    }
+
+    fn names(app: &FontApp) -> Vec<String> {
+        app.visible().into_iter().map(|i| app.families[i].name.clone()).collect()
+    }
+
+    #[test]
+    fn visible_obeys_collection_text_and_search() {
+        let mut app = app_with_scripts();
+        app.refresh_counts();
+        assert_eq!(names(&app), ["Ara", "Lat", "Mix"]);
+        assert_eq!(app.collection_counts()[Collection::Arabic.index()], 2);
+        assert_eq!(app.collection_counts()[Collection::English.index()], 2);
+        app.text = "عبد".into();
+        assert_eq!(names(&app), ["Ara", "Mix"]);
+        app.text = "Hello".into();
+        assert_eq!(names(&app), ["Lat", "Mix"]);
+        app.text = "Hello عبد".into();
+        assert_eq!(names(&app), ["Mix"]);
+        app.text = "123 !?".into();
+        assert_eq!(names(&app).len(), 3);
+        app.text.clear();
+        app.set_collection(Some(Collection::Arabic));
+        assert_eq!(names(&app), ["Ara", "Mix"]);
+        app.search = "mi".into();
+        assert_eq!(names(&app), ["Mix"]);
+        app.search.clear();
+        app.set_collection(None);
+        app.text = "عبد".into();
+        app.set_view(grid::View::Grid);
+        assert_eq!(names(&app).len(), 3); // the grid ignores the preview text
+    }
+
+    #[test]
+    fn collection_and_source_exclude_each_other() {
+        let mut app = app_with_scripts();
+        app.set_collection(Some(Collection::Arabic));
+        app.set_source(Some(1));
+        assert_eq!((app.collection, app.source), (None, Some(1)));
+        app.set_collection(Some(Collection::English));
+        assert_eq!((app.collection, app.source), (Some(Collection::English), None));
+    }
+
+    #[test]
+    fn turned_on_follows_the_active_set() {
+        let mut app = app_with_scripts();
+        app.refresh_counts();
+        assert_eq!(app.collection_counts()[Collection::TurnedOn.index()], 0);
+        app.set_collection(Some(Collection::TurnedOn));
+        assert!(names(&app).is_empty());
+        let path = app.families[1].faces[0].path.clone();
+        app.active.insert(activate::norm(&path));
+        app.refresh_counts();
+        assert_eq!(app.collection_counts()[Collection::TurnedOn.index()], 1);
+        assert_eq!(names(&app), ["Lat"]);
+        app.active.clear();
+        app.refresh_counts();
+        assert!(names(&app).is_empty());
+    }
+
+    #[test]
+    fn filters_do_not_clear_the_selection() {
+        let mut app = app_with_scripts();
+        app.selected = Some("Lat".into());
+        app.text = "عبد".into();
+        assert!(!names(&app).contains(&"Lat".to_string()));
+        assert_eq!(app.selected.as_deref(), Some("Lat"));
     }
 
     #[test]

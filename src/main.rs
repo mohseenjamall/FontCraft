@@ -3,6 +3,7 @@ mod activate;
 // Built on every OS so its file logic is tested on Windows too; only used on macOS and Linux.
 mod activate_unix;
 mod app;
+mod collections;
 mod disabled;
 mod fonts;
 mod grid;
@@ -76,6 +77,8 @@ fn main() -> eframe::Result {
     let select = arg("--select");
     // Starts with this preview text (used with --screenshot to check how a sample draws).
     let text = arg("--text");
+    // Starts with one collection chosen (turnedon, arabic, english, variable, weights), for screenshots.
+    let collection = arg("--collection");
     // Starts in the grid, "grid", or the default list (used with --screenshot to check the cards).
     let view = arg("--view");
 
@@ -113,6 +116,9 @@ fn main() -> eframe::Result {
             }
             if let Some(view) = &view {
                 app.set_view(grid::View::parse(view));
+            }
+            if let Some(c) = collection.as_deref().and_then(collections::Collection::parse) {
+                app.set_collection(Some(c));
             }
             if let Some(name) = select {
                 app.open_family(name);
