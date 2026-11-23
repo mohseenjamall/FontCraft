@@ -297,6 +297,41 @@ impl FontApp {
         }
     }
 
+    /// Forgets an added folder: the saved list, its fonts and its row. Files on disk and the on/off
+    /// state of fonts are never touched. Built-in sources can't be removed.
+    fn remove_folder(&mut self, source: usize) {
+        if self.drop_source(source) {
+            crate::store::save_folders(&self.sources.iter().skip(self.fixed_sources).map(|(_, p)| p.clone()).collect::<Vec<_>>());
+        }
+    }
+
+    /// The in-memory part of [`FontApp::remove_folder`]: drops the source and its faces, shifts later
+    /// sources down by one and repairs the chosen folder and the selection.
+    fn drop_source(&mut self, source: usize) -> bool {
+        if source < self.fixed_sources || source >= self.sources.len() {
+            return false;
+        }
+        self.sources.remove(source);
+        self.faces.retain(|f| f.source != source);
+        for f in &mut self.faces {
+            if f.source > source {
+                f.source -= 1;
+            }
+        }
+        self.source = match self.source {
+            Some(s) if s == source => None,
+            Some(s) if s > source => Some(s - 1),
+            other => other,
+        };
+        self.families = group(&self.faces);
+        self.refresh_counts();
+        if self.selected.as_ref().is_some_and(|name| !self.families.iter().any(|f| &f.name == name)) {
+            self.selected = None;
+            self.selected_face = 0;
+        }
+        true
+    }
+
     fn add_folder(&mut self, dir: PathBuf) {
         if self.sources.iter().any(|(_, p)| *p == dir) {
             return;
@@ -369,8 +404,15 @@ fn name_galley(ctx: &egui::Context, name: &str) -> std::sync::Arc<egui::Galley> 
 
 /// A sidebar row: label left, count right in mono, 32 high with a quiet selection.
 fn source_row(ui: &mut egui::Ui, label: &str, count: usize, selected: bool) -> egui::Response {
+    sidebar_row(ui, label, count, selected, false).0
+}
+
+/// A sidebar row; when `removable`, hovering it swaps the count for a remove control.
+/// Returns the row's response and whether the remove control was used (click, or Delete while focused).
+fn sidebar_row(ui: &mut egui::Ui, label: &str, count: usize, selected: bool, removable: bool) -> (egui::Response, bool) {
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), theme::ROW_HEIGHT), egui::Sense::click());
+    let over = removable && ui.rect_contains_pointer(rect);
     let painter = ui.painter();
     if selected {
         painter.rect(
@@ -393,14 +435,23 @@ fn source_row(ui: &mut egui::Ui, label: &str, count: usize, selected: bool) -> e
         egui::FontId::proportional(theme::size::BODY),
         text_color,
     );
-    painter.text(
-        egui::pos2(rect.right() - theme::space::S, rect.center().y),
-        egui::Align2::RIGHT_CENTER,
-        count.to_string(),
-        egui::FontId::new(theme::size::META, theme::mono()),
-        color::CHROME_TEXT_MUTED,
-    );
-    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+    let mut removed = removable && response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Delete));
+    if over {
+        let target = egui::Rect::from_center_size(egui::pos2(rect.right() - 16.0, rect.center().y), egui::vec2(24.0, 24.0));
+        let button = ui.interact(target, response.id.with("remove"), egui::Sense::click());
+        let tint = if button.hovered() { color::CHROME_TEXT } else { color::CHROME_TEXT_MUTED };
+        ui.painter().text(target.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(theme::size::TITLE), tint);
+        removed |= button.on_hover_text("Remove folder").clicked();
+    } else {
+        ui.painter().text(
+            egui::pos2(rect.right() - theme::space::S, rect.center().y),
+            egui::Align2::RIGHT_CENTER,
+            count.to_string(),
+            egui::FontId::new(theme::size::META, theme::mono()),
+            color::CHROME_TEXT_MUTED,
+        );
+    }
+    (response.on_hover_cursor(egui::CursorIcon::PointingHand), removed)
 }
 
 /// Background scans feeding one stream of faces; `pending` counts scans still running.
@@ -619,11 +670,20 @@ impl FontApp {
                         ui.add_space(theme::space::M);
                         widgets::section_label(ui, "Folders");
                         ui.add_space(theme::space::S);
+                        let mut remove = None;
                         for i in 0..self.sources.len() {
                             let count = self.families.iter().filter(|f| f.faces.iter().any(|x| x.source == i)).count();
-                            if source_row(ui, &self.sources[i].0, count, self.source == Some(i)).clicked() {
+                            // Added folders can be removed once the scan is over (the scan indexes folders by position).
+                            let removable = i >= self.fixed_sources && self.scan_done;
+                            let (row, removed) = sidebar_row(ui, &self.sources[i].0, count, self.source == Some(i), removable);
+                            if removed {
+                                remove = Some(i);
+                            } else if row.clicked() {
                                 self.set_source(Some(i));
                             }
+                        }
+                        if let Some(i) = remove {
+                            self.remove_folder(i);
                         }
                         ui.add_space(theme::space::M);
                         if widgets::primary_button(ui, "Add folder").clicked()
@@ -1284,6 +1344,45 @@ mod tests {
         app.text = "عبد".into();
         assert!(!names(&app).contains(&"Lat".to_string()));
         assert_eq!(app.selected.as_deref(), Some("Lat"));
+    }
+
+    #[test]
+    fn dropping_a_folder_shifts_the_rest_and_repairs_state() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-drop-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let kept_file = dir.join("keep.ttf");
+        std::fs::write(&kept_file, b"x").unwrap();
+        let mut app = FontApp::for_test(
+            3,
+            vec![
+                sourced("a.ttf".as_ref(), "OnlyA", 3),
+                sourced(&kept_file, "OnlyB", 4),
+                sourced("shared-a.ttf".as_ref(), "Shared", 3),
+                sourced("shared-b.ttf".as_ref(), "Shared", 4),
+            ],
+        );
+        app.sources = ["System", "User", "FontBase", "A", "B"].map(|n| (n.to_string(), PathBuf::from(n))).to_vec();
+        app.source = Some(4);
+        app.selected = Some("OnlyA".into());
+        assert!(app.drop_source(3));
+        assert_eq!(app.sources.len(), 4);
+        assert_eq!(app.sources[3].0, "B");
+        assert_eq!(app.source, Some(3)); // B moved from 4 to 3 and stays chosen
+        let names: Vec<&str> = app.families.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["OnlyB", "Shared"]);
+        assert!(app.faces.iter().all(|f| f.source == 3)); // everything left lives in the shifted folder
+        assert_eq!(app.selected, None); // its only family went away
+        assert!(kept_file.is_file()); // files on disk are never touched
+        // Built-in sources and unknown indexes are refused.
+        assert!(!app.drop_source(1));
+        assert!(!app.drop_source(9));
+        assert_eq!(app.sources.len(), 4);
+        // Removing the chosen folder clears the choice; a kept selection stays.
+        app.selected = Some("Shared".into());
+        assert!(app.drop_source(3));
+        assert_eq!(app.source, None);
+        assert!(app.families.is_empty());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
