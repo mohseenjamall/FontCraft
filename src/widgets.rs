@@ -117,6 +117,12 @@ pub fn segmented(ui: &mut egui::Ui, labels: &[&str], selected: usize) -> Option<
     clicked
 }
 
+/// Text that acts as a link: cobalt, underlined, pointing hand.
+pub fn link(ui: &mut egui::Ui, text: &str) -> Response {
+    let label = egui::Label::new(RichText::new(text).size(size::SECONDARY).color(color::COBALT).underline()).sense(egui::Sense::click());
+    ui.add(label).on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
 /// Small heading above a group of rows: 13 px medium, secondary colour.
 pub fn section_label(ui: &mut egui::Ui, text: &str) {
     ui.label(RichText::new(text).font(FontId::new(size::BODY, theme::medium())).color(color::CHROME_TEXT_DIM));

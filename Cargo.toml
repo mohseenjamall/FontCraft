@@ -10,7 +10,7 @@ image = { version = "0.25.10", default-features = false, features = ["png"] }
 rfd = "0.18.0"
 self-replace = "1.5.1"
 sha2 = "0.11.1"
-ttf-parser = { version = "0.25.1", default-features = false, features = ["std"] }
+ttf-parser = { version = "0.25.1", default-features = false, features = ["std", "variable-fonts"] }
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 eframe = { version = "0.37.0", default-features = false, features = ["x11", "wayland"] }

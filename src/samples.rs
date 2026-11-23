@@ -38,7 +38,6 @@ pub const LATIN: u16 = 1 << 0;
 pub const ARABIC: u16 = 1 << 4;
 
 /// What people call each script, in [`SCRIPTS`] order (bit 0 is Latin, shown as "English").
-#[allow(dead_code)] // used by the filters in the next task
 const NAMES: [&str; 16] = [
     "English", "Chinese", "Japanese", "Devanagari", "Arabic", "Cyrillic", "Greek", "Khmer", "Lao", "Thai", "Tamil", "Burmese",
     "Bengali", "Hebrew", "Armenian", "Georgian",
@@ -79,7 +78,6 @@ pub fn scripts_in(text: &str) -> u16 {
 }
 
 /// "Arabic", "Arabic and English", "Arabic, English and Hebrew"; empty for no script.
-#[allow(dead_code)] // used by the filters in the next task
 pub fn script_names(mask: u16) -> String {
     let names: Vec<&str> = NAMES.iter().enumerate().filter(|(i, _)| mask & (1 << i) != 0).map(|(_, n)| *n).collect();
     match names.as_slice() {

@@ -17,7 +17,6 @@ impl Collection {
     pub const ALL: [Collection; 5] =
         [Collection::TurnedOn, Collection::Arabic, Collection::English, Collection::Variable, Collection::ManyWeights];
 
-    #[allow(dead_code)] // drawn by the sidebar in the next task
     pub fn label(self) -> &'static str {
         match self {
             Collection::TurnedOn => "Turned on",
@@ -28,7 +27,6 @@ impl Collection {
         }
     }
 
-    #[allow(dead_code)] // drawn by the sidebar in the next task
     pub fn hint(self) -> &'static str {
         match self {
             Collection::TurnedOn => "Fonts that are on for you, whoever turned them on",

@@ -138,7 +138,7 @@ impl FontApp {
         let mut sources = scan::system_folders();
         let activated = sources.len();
         // Fonts FontBase activated from other folders (scanned file by file).
-        let label = if cfg!(windows) { "Activated by FontBase" } else { "Turned on by FontCraft" };
+        let label = if cfg!(windows) { "From FontBase" } else { "Turned on by FontCraft" };
         sources.push((label.into(), PathBuf::new()));
         sources.extend(crate::store::load_folders().into_iter().map(|p| (folder_label(&p), p)));
         let mut jobs: Vec<(usize, PathBuf)> =
@@ -253,7 +253,6 @@ impl FontApp {
     }
 
     /// Families per collection, as of the last scan result or on/off change.
-    #[allow(dead_code)] // drawn by the sidebar in the next task
     pub fn collection_counts(&self) -> [usize; 5] {
         self.counts
     }
@@ -550,32 +549,26 @@ impl FontApp {
                     let gaps = 4.0 * theme::space::M;
                     let label_w = if show_label { 40.0 } else { 0.0 };
                     let width = (avail - label_w - slider_w - 70.0 - 100.0 - search_w - gaps).max(100.0);
-                    // The preview text and the size only drive the list, so they dim in the grid.
-                    let preview = ui
-                        .add_enabled_ui(in_list, |ui| {
-                            ui.add(
-                                egui::TextEdit::singleline(&mut self.text)
-                                    .hint_text("Type something to preview…")
-                                    .desired_width(width)
-                                    .min_size(egui::vec2(0.0, 28.0))
-                                    .align(egui::Align2::LEFT_CENTER)
-                                    .background_color(color::CHROME_RAISED),
-                            )
-                        })
-                        .inner;
-                    preview.on_disabled_hover_text("Used in the list view");
-                    ui.add_space(theme::space::M);
-                    let size = ui
-                        .add_enabled_ui(in_list, |ui| {
+                    // The preview text and the size only drive the list, so the grid hides them.
+                    if in_list {
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.text)
+                                .hint_text("Type something to preview…")
+                                .desired_width(width)
+                                .min_size(egui::vec2(0.0, 28.0))
+                                .align(egui::Align2::LEFT_CENTER)
+                                .background_color(color::CHROME_RAISED),
+                        );
+                        ui.add_space(theme::space::M);
+                        ui.scope(|ui| {
                             ui.spacing_mut().slider_width = slider_w;
                             if show_label {
                                 ui.label(RichText::new("Size").color(color::CHROME_TEXT_DIM));
                             }
-                            widgets::ruler_slider(ui, &mut self.size, SIZE_MIN..=SIZE_MAX, SIZE_STEP)
-                        })
-                        .inner;
-                    size.on_disabled_hover_text("Used in the list view");
-                    ui.add_space(theme::space::M);
+                            widgets::ruler_slider(ui, &mut self.size, SIZE_MIN..=SIZE_MAX, SIZE_STEP);
+                        });
+                        ui.add_space(theme::space::M);
+                    }
                     if let Some(i) = widgets::segmented(ui, &["List", "Grid"], if in_list { 0 } else { 1 }) {
                         let view = if i == 1 { grid::View::Grid } else { grid::View::List };
                         self.set_view(view);
@@ -595,43 +588,101 @@ impl FontApp {
     }
 
     fn sidebar(&mut self, ui: &mut egui::Ui) {
+        let counts = self.collection_counts();
         egui::Panel::left("sources")
             .exact_size(if ui.available_width() < 800.0 { 200.0 } else { 220.0 })
             .frame(egui::Frame::NONE.fill(color::SIDEBAR).inner_margin(egui::Margin::same(16)))
             .show(ui, |ui| {
                 *ui.visuals_mut() = theme::chrome_visuals();
-                widgets::section_label(ui, "Fonts");
-                ui.add_space(theme::space::S);
-                ui.scope(|ui| {
-                    ui.spacing_mut().item_spacing.y = 2.0;
-                    if source_row(ui, "All fonts", self.families.len(), self.source.is_none()).clicked() {
-                        self.set_source(None);
-                    }
-                    for i in 0..self.sources.len() {
-                        let count = self.families.iter().filter(|f| f.faces.iter().any(|x| x.source == i)).count();
-                        if source_row(ui, &self.sources[i].0, count, self.source == Some(i)).clicked() {
-                            self.set_source(Some(i));
+                // The three groups scroll; the footer below them (counts and the support card) stays in view.
+                let footer = 104.0;
+                egui::ScrollArea::vertical()
+                    .id_salt("sidebar_groups")
+                    .auto_shrink([false, false])
+                    .max_height((ui.available_height() - footer).max(60.0))
+                    .show(ui, |ui| {
+                        ui.spacing_mut().item_spacing.y = 2.0;
+                        widgets::section_label(ui, "Library");
+                        ui.add_space(theme::space::S);
+                        let all = self.source.is_none() && self.collection.is_none();
+                        if source_row(ui, "All fonts", self.families.len(), all).clicked() {
+                            self.set_source(None);
+                            self.set_collection(None);
                         }
-                    }
-                });
-                ui.add_space(theme::space::M);
-                if widgets::primary_button(ui, "Add folder").clicked()
-                    && let Some(dir) = rfd::FileDialog::new().pick_folder()
-                {
-                    self.add_folder(dir);
-                }
+                        self.collection_row(ui, Collection::TurnedOn, counts);
+                        ui.add_space(theme::space::M);
+                        widgets::section_label(ui, "Collections");
+                        ui.add_space(theme::space::S);
+                        for c in &Collection::ALL[1..] {
+                            self.collection_row(ui, *c, counts);
+                        }
+                        ui.add_space(theme::space::M);
+                        widgets::section_label(ui, "Folders");
+                        ui.add_space(theme::space::S);
+                        for i in 0..self.sources.len() {
+                            let count = self.families.iter().filter(|f| f.faces.iter().any(|x| x.source == i)).count();
+                            if source_row(ui, &self.sources[i].0, count, self.source == Some(i)).clicked() {
+                                self.set_source(Some(i));
+                            }
+                        }
+                        ui.add_space(theme::space::M);
+                        if widgets::primary_button(ui, "Add folder").clicked()
+                            && let Some(dir) = rfd::FileDialog::new().pick_folder()
+                        {
+                            self.add_folder(dir);
+                        }
+                    });
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                     // First in a bottom-up layout = lowest on screen.
                     self.support_card(ui);
                     ui.add_space(theme::space::S);
-                    let status = if self.scan_done {
-                        format!("{} styles", self.faces.len())
-                    } else {
-                        format!("Scanning… {} styles", self.faces.len())
-                    };
+                    let status = format!("{} families · {} styles", self.families.len(), self.faces.len());
+                    let status = if self.scan_done { status } else { format!("Scanning… {status}") };
                     ui.label(RichText::new(status).font(FontId::new(theme::size::META, theme::mono())).color(color::CHROME_TEXT_MUTED));
                 });
             });
+    }
+
+    /// One Library or Collections row; clicking the chosen one clears the filter.
+    fn collection_row(&mut self, ui: &mut egui::Ui, c: Collection, counts: [usize; 5]) {
+        let chosen = self.collection == Some(c);
+        let response = source_row(ui, c.label(), counts[c.index()], chosen).on_hover_text(c.hint());
+        if response.clicked() {
+            self.set_collection(if chosen { None } else { Some(c) });
+        }
+    }
+
+    /// While the preview text filters the list: says so, and offers to show everything again.
+    fn filter_notice(&mut self, ui: &mut egui::Ui, need: u16) {
+        ui.horizontal(|ui| {
+            let names = crate::samples::script_names(need);
+            ui.label(RichText::new(format!("Showing fonts that support {names}")).size(theme::size::SECONDARY).color(color::INK_DIM));
+            if widgets::link(ui, "Show all fonts").clicked() {
+                self.text.clear();
+            }
+        });
+        ui.add_space(theme::space::S);
+    }
+
+    /// Why the list is empty and what to do about it; the first rule that fits wins.
+    fn empty_text(&self) -> String {
+        if !self.scan_done && self.families.is_empty() {
+            return "Scanning your fonts…".into();
+        }
+        let need = self.text_need();
+        if need != 0 {
+            return format!("No fonts support {}. Show all fonts to see everything.", crate::samples::script_names(need));
+        }
+        if !self.search.is_empty() {
+            return format!("No fonts match \u{201C}{}\u{201D}. Clear the search or pick another source.", self.search);
+        }
+        match self.collection {
+            Some(Collection::TurnedOn) => "Nothing is turned on yet. Turn a font on from its details panel.".into(),
+            Some(Collection::Variable) => "No variable fonts found. Fonts with adjustable weight or width appear here.".into(),
+            Some(Collection::ManyWeights) => "No families with more than 3 weights here. Try All fonts.".into(),
+            Some(c) => format!("No {} fonts here. Try All fonts.", c.label()),
+            None => "No fonts match.".into(),
+        }
     }
 
     /// Small card at the bottom of the side panel: picture, thanks line and the coffee link.
@@ -670,12 +721,16 @@ impl FontApp {
         }
         let visible = self.visible();
         let row_h = self.size * 1.35 + 34.0;
+        let need = self.text_need();
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(color::PAPER).inner_margin(egui::Margin::symmetric(theme::space::XL as i8, 8)))
             .show(ui, |ui| {
+                if need != 0 {
+                    self.filter_notice(ui, need);
+                }
                 if visible.is_empty() {
                     ui.centered_and_justified(|ui| {
-                        let text = if self.scan_done { "No fonts match." } else { "Looking for fonts…" };
+                        let text = self.empty_text();
                         ui.label(RichText::new(text).size(theme::size::BODY).color(color::INK_MUTED));
                     });
                     return;
@@ -741,7 +796,7 @@ impl FontApp {
             .show(ui, |ui| {
                 if visible.is_empty() {
                     ui.centered_and_justified(|ui| {
-                        let text = if self.scan_done { "No fonts match." } else { "Looking for fonts…" };
+                        let text = self.empty_text();
                         ui.label(RichText::new(text).size(theme::size::BODY).color(color::INK_MUTED));
                     });
                     return;
