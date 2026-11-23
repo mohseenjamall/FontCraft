@@ -137,3 +137,7 @@ rules and numbers it follows and where each one came from.
 ## Not in version 1
 
 Collections and tags, the character map, OpenType feature controls and variable-font sliders.
+
+## License
+
+FontCraft is released under the [MIT license](LICENSE). The bundled UI fonts (Archivo, IBM Plex Mono) are under the SIL Open Font License.
