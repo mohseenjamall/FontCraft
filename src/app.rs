@@ -316,7 +316,9 @@ fn source_row(ui: &mut egui::Ui, label: &str, count: usize, selected: bool) -> e
         painter.rect_filled(rect, theme::radius::CONTROL, color::CHROME_HOVER);
     }
     let text_color = if selected { color::CHROME_TEXT } else { color::CHROME_TEXT_DIM };
-    painter.text(
+    // shortcut: a long label is clipped before the count, no ellipsis; upgrade if names get truncated often.
+    let label_area = egui::Rect::from_min_max(rect.min, egui::pos2(rect.right() - 40.0, rect.max.y));
+    painter.with_clip_rect(label_area).text(
         egui::pos2(rect.left() + theme::space::S, rect.center().y),
         egui::Align2::LEFT_CENTER,
         label,
@@ -469,7 +471,18 @@ impl FontApp {
                 ui.horizontal_centered(|ui| {
                     *ui.visuals_mut() = theme::chrome_visuals();
                     let in_list = self.view == grid::View::List;
-                    let width = ui.available_width() * 0.5;
+                    // Narrow windows shrink the controls and drop the "Size" label so nothing is pushed out of the header.
+                    let avail = ui.available_width();
+                    let (slider_w, search_w, show_label) = if avail < 800.0 {
+                        (64.0, 120.0, false)
+                    } else if avail < 900.0 {
+                        (64.0, 120.0, true)
+                    } else {
+                        (100.0, 180.0, true)
+                    };
+                    let gaps = 4.0 * theme::space::M;
+                    let label_w = if show_label { 40.0 } else { 0.0 };
+                    let width = (avail - label_w - slider_w - 70.0 - 100.0 - search_w - gaps).max(100.0);
                     // The preview text and the size only drive the list, so they dim in the grid.
                     let preview = ui
                         .add_enabled_ui(in_list, |ui| {
@@ -487,7 +500,10 @@ impl FontApp {
                     ui.add_space(theme::space::M);
                     let size = ui
                         .add_enabled_ui(in_list, |ui| {
-                            ui.label(RichText::new("Size").color(color::CHROME_TEXT_DIM));
+                            ui.spacing_mut().slider_width = slider_w;
+                            if show_label {
+                                ui.label(RichText::new("Size").color(color::CHROME_TEXT_DIM));
+                            }
                             widgets::ruler_slider(ui, &mut self.size, SIZE_MIN..=SIZE_MAX, SIZE_STEP)
                         })
                         .inner;
@@ -502,7 +518,7 @@ impl FontApp {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.search)
                             .hint_text("Search fonts")
-                            .desired_width(180.0)
+                            .desired_width(search_w)
                             .min_size(egui::vec2(0.0, 28.0))
                             .align(egui::Align2::LEFT_CENTER)
                             .background_color(color::CHROME_RAISED),
@@ -513,7 +529,7 @@ impl FontApp {
 
     fn sidebar(&mut self, ui: &mut egui::Ui) {
         egui::Panel::left("sources")
-            .exact_size(220.0)
+            .exact_size(if ui.available_width() < 800.0 { 200.0 } else { 220.0 })
             .frame(egui::Frame::NONE.fill(color::SIDEBAR).inner_margin(egui::Margin::same(16)))
             .show(ui, |ui| {
                 *ui.visuals_mut() = theme::chrome_visuals();
@@ -562,7 +578,10 @@ impl FontApp {
                 .inner_margin(8.0)
                 .show(ui, |ui| {
                     ui.horizontal_centered(|ui| {
-                        if let Some(art) = &self.art {
+                        // The picture goes first when the sidebar is narrow so the button keeps its full label.
+                        if ui.available_width() > 160.0
+                            && let Some(art) = &self.art
+                        {
                             ui.add(egui::Image::new((art.id(), egui::vec2(48.0, 48.0))).corner_radius(4.0));
                         }
                         ui.add_space(theme::space::XS);
@@ -677,7 +696,10 @@ impl FontApp {
                                 rect
                             }
                         };
-                        let x = row_rect.left() + (i % columns) as f32 * (grid::CARD_SIZE + theme::space::L);
+                        // Leftover width is split evenly on both sides so the grid stays centred as the window changes.
+                        let used = columns as f32 * grid::CARD_SIZE + (columns - 1) as f32 * theme::space::L;
+                        let margin = ((row_rect.width() - used) / 2.0).max(0.0);
+                        let x = row_rect.left() + margin + (i % columns) as f32 * (grid::CARD_SIZE + theme::space::L);
                         let card = egui::Rect::from_min_size(egui::pos2(x, row_rect.top()), egui::vec2(grid::CARD_SIZE, grid::CARD_SIZE));
                         self.card(ui, visible[i], card);
                     }
@@ -757,6 +779,7 @@ impl FontApp {
         let mut clicked = false;
         egui::Panel::right("details")
             .default_size(420.0)
+            .max_size(ui.available_width() * 0.6)
             .resizable(true)
             .frame(egui::Frame::NONE.fill(color::CARD).inner_margin(egui::Margin::same(16)))
             .show(ui, |ui| {

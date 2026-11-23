@@ -79,9 +79,13 @@ fn main() -> eframe::Result {
     // Starts in the grid, "grid", or the default list (used with --screenshot to check the cards).
     let view = arg("--view");
 
+    // Window size for screenshots, e.g. `--size 720x480` (checks the narrow layout).
+    let size = arg("--size")
+        .and_then(|v| v.split_once('x').and_then(|(w, h)| Some([w.parse::<f32>().ok()?, h.parse::<f32>().ok()?])))
+        .unwrap_or([1280.0, 800.0]);
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("FontCraft")
-        .with_inner_size([1280.0, 800.0])
+        .with_inner_size(size)
         .with_min_inner_size([720.0, 480.0])
         .with_icon(std::sync::Arc::new(support::app_icon()));
     if shot_path.is_some() {
