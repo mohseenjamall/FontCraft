@@ -8,6 +8,7 @@ use eframe::egui::{self, Color32, FontId, RichText};
 
 use crate::activate;
 use crate::fonts::FontLoader;
+use crate::grid;
 use crate::scan::{self, Face};
 use crate::theme::{self, color};
 use crate::widgets;
@@ -82,6 +83,8 @@ pub struct FontApp {
     size: f32,
     search: String,
     source: Option<usize>,
+    /// Whether the families show as a list or as a grid of cards.
+    view: grid::View,
     selected: Option<String>,
     selected_face: usize,
     /// Files on for this user through the registry (installed, FontCraft or FontBase), `norm` keys.
@@ -137,6 +140,7 @@ impl FontApp {
             size: SIZE_DEFAULT,
             search: String::new(),
             source: None,
+            view: grid::View::List,
             selected: None,
             selected_face: 0,
             active: activate::read_active(&activate::key()),
@@ -200,6 +204,11 @@ impl FontApp {
 
     pub fn set_text(&mut self, text: String) {
         self.text = text;
+    }
+
+    /// Shows the families as a list or as a grid of cards.
+    pub fn set_view(&mut self, v: grid::View) {
+        self.view = v;
     }
 
     /// True once every font is listed and every visible preview has its typeface.
@@ -267,6 +276,27 @@ fn pick_font(ctx: &egui::Context, family: egui::FontFamily, sample: &str, size: 
 
 fn folder_label(p: &std::path::Path) -> String {
     p.file_name().map_or_else(|| p.display().to_string(), |n| n.to_string_lossy().into_owned())
+}
+
+/// A family name laid out to at most two lines inside a card width, cut with an ellipsis when
+/// it would need more.
+fn name_galley(ctx: &egui::Context, name: &str) -> std::sync::Arc<egui::Galley> {
+    let font = FontId::proportional(theme::size::SECONDARY);
+    let layout = |s: String| ctx.fonts_mut(|f| f.layout(s, font.clone(), color::INK_DIM, grid::CARD_SIZE));
+    let galley = layout(name.to_owned());
+    if galley.rows.len() <= 2 {
+        return galley;
+    }
+    let chars: Vec<char> = name.chars().collect();
+    for cut in (0..chars.len()).rev() {
+        let mut s: String = chars[..cut].iter().collect();
+        s.push('…');
+        let short = layout(s);
+        if short.rows.len() <= 2 {
+            return short;
+        }
+    }
+    layout("…".to_owned())
 }
 
 /// A sidebar row: label left, count right in mono, 32 high with a quiet selection.
@@ -531,6 +561,9 @@ impl FontApp {
     }
 
     fn list(&mut self, ui: &mut egui::Ui) {
+        if self.view == grid::View::Grid {
+            return self.grid(ui);
+        }
         let visible = self.visible();
         let row_h = self.size * 1.35 + 34.0;
         egui::CentralPanel::default()
@@ -590,6 +623,98 @@ impl FontApp {
             }
         }
         if resp.clicked() {
+            self.selected = if selected { None } else { Some(name) };
+            self.selected_face = 0;
+        }
+    }
+
+    /// The same families as square cards, virtualized by row: only the visible cards are drawn
+    /// and only their fonts load.
+    fn grid(&mut self, ui: &mut egui::Ui) {
+        let visible = self.visible();
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE.fill(color::PAPER).inner_margin(egui::Margin::symmetric(theme::space::XL as i8, 8)))
+            .show(ui, |ui| {
+                if visible.is_empty() {
+                    ui.centered_and_justified(|ui| {
+                        let text = if self.scan_done { "No fonts match." } else { "Looking for fonts…" };
+                        ui.label(RichText::new(text).size(theme::size::BODY).color(color::INK_MUTED));
+                    });
+                    return;
+                }
+                let columns = grid::columns(ui.available_width());
+                let rows = grid::row_count(visible.len(), columns);
+                egui::ScrollArea::vertical().auto_shrink(false).show_rows(ui, grid::row_height(), rows, |ui, range| {
+                    let drawn = grid::visible_range(range.start, range.end, columns, visible.len());
+                    // One allocation per row; the cards sit left to right inside it.
+                    let mut row: Option<(usize, egui::Rect)> = None;
+                    for i in drawn {
+                        let r = i / columns;
+                        let row_rect = match row {
+                            Some((same, rect)) if same == r => rect,
+                            _ => {
+                                let (rect, _) =
+                                    ui.allocate_exact_size(egui::vec2(ui.available_width(), grid::row_height()), egui::Sense::hover());
+                                row = Some((r, rect));
+                                rect
+                            }
+                        };
+                        let x = row_rect.left() + (i % columns) as f32 * (grid::CARD_SIZE + theme::space::L);
+                        let card = egui::Rect::from_min_size(egui::pos2(x, row_rect.top()), egui::vec2(grid::CARD_SIZE, grid::CARD_SIZE));
+                        self.card(ui, visible[i], card);
+                    }
+                });
+            });
+    }
+
+    /// One card: the script glyph in the family's own face, its style count, the On dot and the
+    /// name underneath. A click opens the same details as a list row.
+    fn card(&mut self, ui: &mut egui::Ui, i: usize, card: egui::Rect) {
+        let fam = &self.families[i];
+        let face = fam.main_face().clone();
+        let selected = self.selected.as_deref() == Some(fam.name.as_str());
+        let (name, styles) = (fam.name.clone(), fam.faces.len());
+        let on = all_active(&self.active, &self.disabled, fam);
+        let family = self.loader.family(&face);
+        let glyph = crate::samples::card_glyph(face.script);
+        let name_rect = egui::Rect::from_min_size(
+            egui::pos2(card.left(), card.bottom() + theme::space::S),
+            egui::vec2(grid::CARD_SIZE, grid::NAME_H),
+        );
+        let resp = ui.interact(card.union(name_rect), ui.scope_id().with(("grid card", i)), egui::Sense::click());
+        let painter = ui.painter_at(card.union(name_rect));
+        let fill = if selected {
+            color::SELECTED
+        } else if resp.hovered() {
+            color::CANVAS_HOVER
+        } else {
+            color::CARD
+        };
+        painter.rect(card, theme::radius::CARD, fill, egui::Stroke::new(1.0, color::CANVAS_LINE), egui::StrokeKind::Inside);
+        const GLYPH_SIZE: f32 = 44.0;
+        match family.map(|f| pick_font(ui.ctx(), f, glyph, GLYPH_SIZE, color::INK)) {
+            Some(d) => {
+                painter.text(card.center(), egui::Align2::CENTER_CENTER, glyph, d.font, d.color);
+            }
+            None => {
+                painter.text(card.center(), egui::Align2::CENTER_CENTER, glyph, FontId::proportional(GLYPH_SIZE), color::CANVAS_LINE);
+            }
+        }
+        painter.text(
+            egui::pos2(card.left() + theme::space::S, card.bottom() - theme::space::S),
+            egui::Align2::LEFT_BOTTOM,
+            format!("{styles} style{}", if styles == 1 { "" } else { "s" }),
+            FontId::proportional(theme::size::META),
+            color::INK_MUTED,
+        );
+        if on {
+            let status =
+                egui::Rect::from_min_size(card.right_top() + egui::vec2(-theme::space::S, theme::space::S), egui::vec2(0.0, 16.0));
+            widgets::status_dot(&painter, status);
+        }
+        let galley = name_galley(ui.ctx(), &name);
+        painter.galley(name_rect.left_top(), galley, color::INK_DIM);
+        if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
             self.selected = if selected { None } else { Some(name) };
             self.selected_face = 0;
         }
@@ -723,6 +848,7 @@ mod tests {
                 size: SIZE_DEFAULT,
                 search: String::new(),
                 source: None,
+                view: grid::View::List,
                 selected: None,
                 selected_face: 0,
                 active: HashSet::new(),
@@ -884,5 +1010,34 @@ mod tests {
         assert_eq!(fams[0].name, "Abc");
         assert_eq!(fams[1].faces.len(), 3);
         assert_eq!(fams[1].main_face().style, "Regular");
+    }
+
+    #[test]
+    fn grid_drawn_for_visible_rows_only() {
+        let faces: Vec<Face> = (0..50).map(|i| face(&format!("Fam{i:02}"), "Regular", 400, false)).collect();
+        let app = FontApp::for_test(3, faces);
+        let visible = app.visible();
+        assert_eq!(visible.len(), 50);
+        let cols = grid::columns(grid::CARD_SIZE * 4.0 + theme::space::L * 3.0);
+        assert_eq!(cols, 4);
+        // What `show_rows` reports for three rows starting at row 3: exactly those families.
+        let drawn = grid::visible_range(3, 6, cols, visible.len());
+        assert_eq!(drawn, 12..24);
+        assert_eq!(&visible[drawn], &visible[12..24]);
+        // The last row stops at the last family, and nothing ever reaches past it.
+        assert_eq!(grid::visible_range(11, 14, cols, visible.len()), 44..50);
+        assert_eq!(grid::visible_range(0, 999, cols, visible.len()), 0..50);
+        assert_eq!(grid::visible_range(0, 2, cols, 0), 0..0);
+    }
+
+    #[test]
+    fn set_view_keeps_selection() {
+        let mut app = FontApp::for_test(3, vec![face("Arial", "Regular", 400, false)]);
+        app.selected = Some("Arial".into());
+        app.set_view(grid::View::Grid);
+        assert_eq!(app.view, grid::View::Grid);
+        assert_eq!(app.selected.as_deref(), Some("Arial"));
+        app.set_view(grid::View::List);
+        assert_eq!(app.selected.as_deref(), Some("Arial"));
     }
 }

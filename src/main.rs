@@ -76,6 +76,8 @@ fn main() -> eframe::Result {
     let select = arg("--select");
     // Starts with this preview text (used with --screenshot to check how a sample draws).
     let text = arg("--text");
+    // Starts in the grid, "grid", or the default list (used with --screenshot to check the cards).
+    let view = arg("--view");
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("FontCraft")
@@ -104,6 +106,9 @@ fn main() -> eframe::Result {
             }
             if let Some(text) = text {
                 app.set_text(text);
+            }
+            if let Some(view) = &view {
+                app.set_view(grid::View::parse(view));
             }
             if let Some(name) = select {
                 app.open_family(name);

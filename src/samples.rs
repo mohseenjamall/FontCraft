@@ -21,11 +21,9 @@ pub const SCRIPTS: [(char, &str); 16] = [
 
 /// One glyph per script in [`SCRIPTS`] order, for the grid cards: "Aa" for Latin, a single
 /// fitting letter elsewhere (the Arabic card uses ain rather than the test letter).
-#[allow(dead_code)] // the grid cards (next tasks) read these
 const GLYPHS: [&str; 16] = ["Aa", "我", "私", "अ", "ع", "и", "ξ", "ក", "ກ", "ข", "அ", "က", "অ", "א", "Ա", "Ⴀ"];
 
 /// The glyph pair shown on a grid card for a script index; out of range falls back to Latin.
-#[allow(dead_code)]
 pub fn card_glyph(script: u8) -> &'static str {
     GLYPHS.get(script as usize).copied().unwrap_or(GLYPHS[0])
 }

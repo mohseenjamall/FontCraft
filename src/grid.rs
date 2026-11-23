@@ -1,8 +1,9 @@
 //! Geometry and view choice for the grid of font cards.
+use std::ops::Range;
+
 use crate::theme::space;
 
 /// Which way the families are shown; the list is the default.
-#[allow(dead_code)] // drawn by the grid view
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum View {
     List,
@@ -11,7 +12,6 @@ pub enum View {
 
 impl View {
     /// "grid" (any case, trimmed) is the grid; anything else is the list.
-    #[allow(dead_code)]
     pub fn parse(s: &str) -> View {
         if s.trim().eq_ignore_ascii_case("grid") { View::Grid } else { View::List }
     }
@@ -27,17 +27,14 @@ impl View {
 }
 
 /// Side of a square card.
-#[allow(dead_code)]
 pub const CARD_SIZE: f32 = 136.0;
 /// Height reserved under the card for the family name.
-#[allow(dead_code)]
 pub const NAME_H: f32 = 34.0;
 
 /// Gap between cards, and the same gap above the name area.
 const GAP: f32 = space::L;
 
 /// How many cards fit in `avail_width`, counting the gaps; never less than one.
-#[allow(dead_code)]
 pub fn columns(avail_width: f32) -> usize {
     if !avail_width.is_finite() || avail_width < 0.0 {
         return 1;
@@ -47,15 +44,22 @@ pub fn columns(avail_width: f32) -> usize {
 }
 
 /// Rows needed for `items` at `columns` per row; zero for an empty list.
-#[allow(dead_code)]
 pub fn row_count(items: usize, columns: usize) -> usize {
     items.div_ceil(columns.max(1))
 }
 
 /// Height of one tile: card, then the name area below it.
-#[allow(dead_code)]
 pub fn row_height() -> f32 {
     CARD_SIZE + space::S + NAME_H + space::L
+}
+
+/// The family indexes covered by rows `first_row..last_row` (what `show_rows` reports),
+/// clamped to `total`; never reaches past the families that exist.
+pub fn visible_range(first_row: usize, last_row: usize, columns: usize, total: usize) -> Range<usize> {
+    let columns = columns.max(1);
+    let start = (first_row * columns).min(total);
+    let end = (last_row * columns).min(total);
+    start..end.max(start)
 }
 
 #[cfg(test)]
