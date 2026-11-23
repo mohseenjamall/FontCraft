@@ -17,6 +17,7 @@ const releaseUrl = 'https://github.com/mohseenjamall/FontCraft/releases/tag/v1.1
         <a class="btn btn-primary get-download" href={releasesUrl} data-download target="_blank" rel="noopener noreferrer">
           Download<span data-os></span> <span aria-hidden="true">&darr;</span>
         </a>
+        <p class="meta get-count" data-downloads hidden><span data-downloads-n></span> downloads</p>
         <p class="meta get-all-label">Other systems</p>
         <ul class="get-all">
           <li><a class="btn btn-secondary" href={releasesUrl} data-dl-os="windows">Windows <span aria-hidden="true">&darr;</span></a></li>
@@ -74,6 +75,10 @@ const releaseUrl = 'https://github.com/mohseenjamall/FontCraft/releases/tag/v1.1
 
   .get-download {
     margin-top: 18px;
+  }
+
+  .get-count {
+    margin-top: 12px;
   }
 
   .get-all-label {

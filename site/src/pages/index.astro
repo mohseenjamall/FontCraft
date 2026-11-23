@@ -28,6 +28,7 @@ const description =
 <script>
   import { pickAsset } from '../lib/pick-asset.mjs';
   import { detectPlatform } from '../lib/detect-platform.mjs';
+  import { sumDownloads, formatCount } from '../lib/sum-downloads.mjs';
 
   // Keeps the version numbers and the Download buttons in step with the newest GitHub release,
   // so nothing here is edited by hand at release time. The HTML holds the last known values as a
@@ -133,6 +134,35 @@ const description =
         apply(release);
         try {
           sessionStorage.setItem(CACHE_KEY, JSON.stringify(release));
+        } catch {}
+      })
+      .catch(() => {});
+  }
+
+  // Total downloads of every release, shown next to the Download button; hidden if GitHub can't be reached or the total is 0.
+  // shortcut: first 100 releases only, paginate if the repo ever has more.
+  const COUNT_KEY = 'fontcraft-downloads';
+  const showCount = (n) => {
+    if (!(n > 0)) return;
+    document.querySelectorAll('[data-downloads-n]').forEach((el) => (el.textContent = formatCount(n)));
+    document.querySelectorAll('[data-downloads]').forEach((el) => (el.hidden = false));
+  };
+  let cachedCount = null;
+  try {
+    cachedCount = Number(sessionStorage.getItem(COUNT_KEY));
+  } catch {}
+  if (cachedCount > 0) {
+    showCount(cachedCount);
+  } else {
+    fetch('https://api.github.com/repos/' + REPO + '/releases?per_page=100', {
+      headers: { Accept: 'application/vnd.github+json' },
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data) => {
+        const total = sumDownloads(data);
+        showCount(total);
+        try {
+          if (total > 0) sessionStorage.setItem(COUNT_KEY, String(total));
         } catch {}
       })
       .catch(() => {});
