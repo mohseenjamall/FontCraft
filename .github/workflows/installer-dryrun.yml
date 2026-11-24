@@ -30,13 +30,13 @@ jobs:
               choco install innosetup -y --no-progress
             }
           }
-          & $iscc "/DAppVersion=0.0.0-test" "/DSourceExe=$PWD\target\x86_64-pc-windows-msvc\release\fontcraft.exe" "/O$PWD\dist" packaging\windows\FontCraft.iss
+          & $iscc "/DAppVersion=0.0.1" "/DSourceExe=$PWD\target\x86_64-pc-windows-msvc\release\fontcraft.exe" "/O$PWD\dist" packaging\windows\FontCraft.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-ChildItem dist | Format-Table Name, Length
       - name: Silent install, check, uninstall
         shell: pwsh
         run: |
-          $setup = "$PWD\dist\FontCraft-0.0.0-test-windows-x64-setup.exe"
+          $setup = "$PWD\dist\FontCraft-0.0.1-windows-x64-setup.exe"
           $dir = "$env:RUNNER_TEMP\fc-app"
           $p = Start-Process $setup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR=`"$dir`" /LOG=`"$env:RUNNER_TEMP\install.log`"" -Wait -PassThru
           if ($p.ExitCode -ne 0) { Get-Content "$env:RUNNER_TEMP\install.log"; throw "install exit $($p.ExitCode)" }

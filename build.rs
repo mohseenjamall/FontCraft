@@ -1,6 +1,7 @@
 // Windows resource embedding for the app icon and version info.
 use std::env;
 
+#[cfg(windows)]
 fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if target_os != "windows" {
@@ -21,3 +22,6 @@ fn main() {
         panic!("Failed to embed Windows resources: {e}");
     }
 }
+// winresource is only a build-dependency on Windows hosts.
+#[cfg(not(windows))]
+fn main() {}
