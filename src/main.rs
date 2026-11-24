@@ -70,7 +70,21 @@ fn save_png(img: &egui::ColorImage, path: &std::path::Path) -> Result<(), Box<dy
     Ok(())
 }
 
+#[cfg(windows)]
+fn set_app_id() {
+    use windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+    // SAFETY: passing a valid NUL-terminated UTF-16 string for the AppUserModelID.
+    let app_id: Vec<u16> = "mohseenjamall.FontCraft".encode_utf16().chain(Some(0)).collect();
+    let hr = unsafe { SetCurrentProcessExplicitAppUserModelID(app_id.as_ptr()) };
+    if hr < 0 {
+        eprintln!("SetCurrentProcessExplicitAppUserModelID failed: HRESULT = 0x{hr:08X}");
+    }
+}
+
 fn main() -> eframe::Result {
+    #[cfg(windows)]
+    set_app_id();
+
     let args: Vec<String> = std::env::args().collect();
     let arg = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1)).cloned();
     let shot_path = arg("--screenshot").map(PathBuf::from);
