@@ -32,6 +32,11 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
     matches!((version(latest), version(current)), (Some(l), Some(c)) if l > c)
 }
 
+/// The release page for `version` (without a leading "v").
+pub fn release_page(version: &str) -> String {
+    format!("{RELEASE_PAGES}tag/v{version}")
+}
+
 /// Only FontCraft's own release pages may be opened from the banner.
 fn trusted(url: &str) -> bool {
     url.starts_with(RELEASE_PAGES) && !url.contains(['"', ' ', '\r', '\n', '\\']) && !url.contains("..")
@@ -219,6 +224,13 @@ pub fn open(url: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn release_page_is_trusted() {
+        let url = super::release_page("1.3.0");
+        assert!(super::trusted(&url));
+        assert!(url.ends_with("tag/v1.3.0"));
+    }
+
     use super::*;
 
     #[test]

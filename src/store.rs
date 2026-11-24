@@ -70,9 +70,50 @@ pub fn save_view(v: View) {
     }
 }
 
+/// The version last seen, as saved at `path`; `None` when there is no file or it is empty.
+pub fn read_seen(path: &Path) -> Option<String> {
+    let s = std::fs::read_to_string(path).ok()?;
+    let s = s.trim();
+    (!s.is_empty()).then(|| s.to_owned())
+}
+
+/// Saves the version to `path`, creating its folder when needed.
+pub fn write_seen(path: &Path, version: &str) {
+    let saved = path.parent().map_or(Ok(()), std::fs::create_dir_all).and_then(|_| std::fs::write(path, version));
+    if let Err(e) = saved {
+        eprintln!("could not remember the version in {}: {e}", path.display());
+    }
+}
+
+/// The version of FontCraft the person last started.
+pub fn load_seen_version() -> Option<String> {
+    crate::platform::app_data_dir().and_then(|d| read_seen(&d.join("seen_version.txt")))
+}
+
+/// Remembers the running version for the next start.
+pub fn save_seen_version(version: &str) {
+    if let Some(d) = crate::platform::app_data_dir() {
+        write_seen(&d.join("seen_version.txt"), version);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn seen_version_roundtrips_through_a_file() {
+        let dir = std::env::temp_dir().join(format!("fontcraft_seen_{}", std::process::id()));
+        let path = dir.join("seen_version.txt");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(read_seen(&path), None, "a missing file is none");
+        write_seen(&path, "1.2.0");
+        assert_eq!(read_seen(&path), Some("1.2.0".into()));
+        std::fs::write(&path, " 
+").unwrap();
+        assert_eq!(read_seen(&path), None, "an empty file is none");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn view_roundtrips_through_a_file() {

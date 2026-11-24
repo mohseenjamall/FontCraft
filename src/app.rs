@@ -127,6 +127,8 @@ pub struct FontApp {
     bulk_note: Option<String>,
     /// (to turn on, to turn off, locked) for the families last shown; dropped when on/off state changes.
     bulk_cache: Option<(Vec<usize>, [usize; 3])>,
+    /// The notes for the version just installed, shown as a banner until "Got it".
+    whats_new: Option<Vec<String>>,
     /// A newer release, once the background check finds one; shown as a banner that stays.
     update: Option<crate::update::Update>,
     updates: Option<Receiver<crate::update::Update>>,
@@ -183,6 +185,7 @@ impl FontApp {
             pending_bulk: None,
             bulk_note: None,
             bulk_cache: None,
+            whats_new: Self::start_notes(),
             update: None,
             updates: None,
             update_error: None,
@@ -197,6 +200,22 @@ impl FontApp {
         self.updates = Some(crate::update::spawn_check(ctx.clone()));
     }
 
+
+    /// Notes to show on this start, and remembers the running version. Shown means seen: it
+    /// appears once even if the app is closed without clicking.
+    fn start_notes() -> Option<Vec<String>> {
+        let current = env!("CARGO_PKG_VERSION");
+        let start = crate::whats_new::on_start(crate::store::load_seen_version().as_deref(), current, crate::whats_new::NOTES);
+        if start.save_version {
+            crate::store::save_seen_version(current);
+        }
+        start.notes
+    }
+
+    /// Forces the current version's notes on screen (used with --screenshot).
+    pub fn show_whats_new(&mut self) {
+        self.whats_new = crate::whats_new::parse_notes(crate::whats_new::NOTES, env!("CARGO_PKG_VERSION"));
+    }
 
     /// Shows one family: its details panel open and the list searched down to it.
     pub fn open_family(&mut self, name: String) {
@@ -597,11 +616,46 @@ impl eframe::App for FontApp {
         self.header(ui);
         self.sidebar(ui);
         self.details(ui);
+        self.whats_new_banner(ui);
         self.list(ui);
     }
 }
 
 impl FontApp {
+    /// Once, after an update: what changed. It sits above the list and never blocks it.
+    fn whats_new_banner(&mut self, ui: &mut egui::Ui) {
+        let Some(notes) = self.whats_new.clone() else { return };
+        let version = env!("CARGO_PKG_VERSION");
+        egui::Panel::top("whats_new")
+            .frame(
+                egui::Frame::NONE
+                    .fill(color::CARD)
+                    .stroke(egui::Stroke::new(1.0, color::CANVAS_LINE))
+                    .inner_margin(egui::Margin::same(16)),
+            )
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(format!("New in {version}")).font(FontId::new(15.0, theme::medium())).color(color::COBALT));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if widgets::primary_button(ui, "Got it").clicked() {
+                            self.dismiss_whats_new();
+                        }
+                        if widgets::link(ui, "Full release notes").clicked() {
+                            self.notice = crate::update::open(&crate::update::release_page(version)).err();
+                        }
+                    });
+                });
+                ui.add_space(theme::space::XS);
+                for note in &notes {
+                    ui.add(egui::Label::new(RichText::new(format!("•  {note}")).size(13.0).color(color::INK_DIM)).wrap());
+                }
+            });
+    }
+
+    fn dismiss_whats_new(&mut self) {
+        self.whats_new = None;
+    }
+
     /// Topmost bar while a newer release exists; it can't be closed, only acted on.
     fn update_banner(&mut self, ui: &mut egui::Ui) {
         let Some(update) = self.update.clone() else { return };
@@ -1240,6 +1294,7 @@ mod tests {
                 pending_bulk: None,
                 bulk_note: None,
                 bulk_cache: None,
+                whats_new: None,
                 update: None,
                 updates: None,
                 update_error: None,
@@ -1398,6 +1453,14 @@ mod tests {
         app.toggle_in("X", &s.key, &s.store());
         assert!(app.notice.as_deref().is_some_and(|n| n.contains("gone.ttf")));
         assert!(app.active.is_empty());
+    }
+
+    #[test]
+    fn got_it_hides_the_banner() {
+        let mut app = FontApp::for_test(3, vec![]);
+        app.whats_new = Some(vec!["x".into()]);
+        app.dismiss_whats_new();
+        assert_eq!(app.whats_new, None);
     }
 
     #[test]

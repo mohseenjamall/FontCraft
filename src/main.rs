@@ -14,6 +14,7 @@ mod store;
 mod support;
 mod theme;
 mod update;
+mod whats_new;
 mod widgets;
 
 use std::path::PathBuf;
@@ -82,6 +83,9 @@ fn main() -> eframe::Result {
     // Starts in the grid, "grid", or the default list (used with --screenshot to check the cards).
     let view = arg("--view");
 
+    // Shows the current version's "What's new" banner, for screenshots.
+    let whats_new = args.iter().any(|a| a == "--whats-new");
+
     // Window size for screenshots, e.g. `--size 720x480` (checks the narrow layout).
     let size = arg("--size")
         .and_then(|v| v.split_once('x').and_then(|(w, h)| Some([w.parse::<f32>().ok()?, h.parse::<f32>().ok()?])))
@@ -110,6 +114,9 @@ fn main() -> eframe::Result {
             // Checks stay offline unless a test names the latest version itself.
             if !checking || std::env::var_os("FONTCRAFT_LATEST").is_some() {
                 app.check_updates(&cc.egui_ctx);
+            }
+            if whats_new {
+                app.show_whats_new();
             }
             if let Some(text) = text {
                 app.set_text(text);
