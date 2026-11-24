@@ -1,0 +1,54 @@
+name: Installer dry run
+
+# Temporary: builds the Windows installer and tests a silent install and uninstall. Delete after the check.
+on:
+  workflow_dispatch:
+  push:
+    branches: [installer]
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Build release
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) {
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+            if (-not (Test-Path $iscc)) {
+              choco install innosetup -y --no-progress
+            }
+          }
+          & $iscc "/DAppVersion=0.0.0-test" "/DSourceExe=$PWD\target\x86_64-pc-windows-msvc\release\fontcraft.exe" "/O$PWD\dist" packaging\windows\FontCraft.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem dist | Format-Table Name, Length
+      - name: Silent install, check, uninstall
+        shell: pwsh
+        run: |
+          $setup = "$PWD\dist\FontCraft-0.0.0-test-windows-x64-setup.exe"
+          $dir = "$env:RUNNER_TEMP\fc-app"
+          $p = Start-Process $setup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR=`"$dir`" /LOG=`"$env:RUNNER_TEMP\install.log`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content "$env:RUNNER_TEMP\install.log"; throw "install exit $($p.ExitCode)" }
+          if (-not (Test-Path "$dir\fontcraft.exe")) { throw "fontcraft.exe missing" }
+          $unins = Get-ChildItem $dir -Filter "unins*.exe" | Select-Object -First 1
+          if (-not $unins) { throw "uninstaller missing" }
+          $lnk = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\FontCraft.lnk"
+          if (-not (Test-Path $lnk)) { throw "Start menu shortcut missing" }
+          Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" | Where-Object DisplayName -like "FontCraft*" | Format-List DisplayName, DisplayVersion, Publisher
+          $u = Start-Process $unins.FullName -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "uninstall exit $($u.ExitCode)" }
+          Start-Sleep 3
+          if (Test-Path "$dir\fontcraft.exe") { throw "exe still present after uninstall" }
+          if (Test-Path $lnk) { throw "shortcut still present after uninstall" }
+          "install and uninstall OK"
