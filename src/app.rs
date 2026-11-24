@@ -15,6 +15,8 @@ use crate::theme::{self, color};
 use crate::widgets;
 
 // Slider limits read from FontBase's style.css / app.js (see MECHANICS.md).
+/// A bulk turn on/off over more families than this asks first.
+const BULK_CONFIRM: usize = 50;
 const SIZE_MIN: f32 = 6.0;
 const SIZE_MAX: f32 = 180.0;
 const SIZE_STEP: f64 = 2.0;
@@ -119,6 +121,12 @@ pub struct FontApp {
     store: PathBuf,
     /// Last activation error, shown under the toggle until clicked away.
     notice: Option<String>,
+    /// A bulk run waiting for a yes (`true` = turn on) and the families it would cover.
+    pending_bulk: Option<(bool, Vec<usize>)>,
+    /// What the last bulk run did, shown in the bulk bar until clicked away.
+    bulk_note: Option<String>,
+    /// (to turn on, to turn off, locked) for the families last shown; dropped when on/off state changes.
+    bulk_cache: Option<(Vec<usize>, [usize; 3])>,
     /// A newer release, once the background check finds one; shown as a banner that stays.
     update: Option<crate::update::Update>,
     updates: Option<Receiver<crate::update::Update>>,
@@ -172,6 +180,9 @@ impl FontApp {
             fontbase_files: fontbase_files(&store),
             store,
             notice: None,
+            pending_bulk: None,
+            bulk_note: None,
+            bulk_cache: None,
             update: None,
             updates: None,
             update_error: None,
@@ -227,6 +238,72 @@ impl FontApp {
         self.refresh_counts();
     }
 
+    /// Files to change, families that change and locked families skipped, for a bulk run over
+    /// `shown` (indexes into `families`). Families already in the wanted state are left out;
+    /// a file shared by several families appears once.
+    fn bulk_plan(&self, shown: &[usize], on: bool) -> (Vec<PathBuf>, usize, usize) {
+        let (mut files, mut changed, mut locked) = (Vec::new(), 0, 0);
+        for &i in shown {
+            let fam = &self.families[i];
+            if !self.can_toggle(fam) {
+                locked += 1;
+            } else if all_active(&self.active, &self.disabled, fam) != on {
+                files.extend(fam.files());
+                changed += 1;
+            }
+        }
+        files.sort();
+        files.dedup();
+        (files, changed, locked)
+    }
+
+    /// (to turn on, to turn off, locked) for `shown`, cached until the on/off state changes.
+    fn bulk_counts(&mut self, shown: &[usize]) -> [usize; 3] {
+        if let Some((cached, counts)) = &self.bulk_cache
+            && cached == shown
+        {
+            return *counts;
+        }
+        let (_, to_on, locked) = self.bulk_plan(shown, true);
+        let (_, to_off, _) = self.bulk_plan(shown, false);
+        let counts = [to_on, to_off, locked];
+        self.bulk_cache = Some((shown.to_vec(), counts));
+        counts
+    }
+
+    /// Forgets a pending bulk run when the families shown are no longer the ones it was asked for.
+    fn drop_stale_bulk(&mut self, shown: &[usize]) {
+        if self.pending_bulk.as_ref().is_some_and(|(_, s)| s != shown) {
+            self.pending_bulk = None;
+        }
+    }
+
+    /// Turns every family in `shown` on (or off) in one call, so Windows is told once. Locked
+    /// families are skipped. Errors go to `notice`; a success to `bulk_note`.
+    fn bulk_in(&mut self, shown: &[usize], on: bool, key: &str, store: &std::path::Path) {
+        self.pending_bulk = None;
+        let (files, changed, _) = self.bulk_plan(shown, on);
+        if changed == 0 {
+            return;
+        }
+        let result = if on { activate::turn_on_in(key, store, &files) } else { activate::turn_off_in(key, store, &files) };
+        // Re-read even on error: a batch can fail after some files already changed.
+        self.active = activate::read_active(key);
+        self.disabled = activate::read_disabled(store);
+        self.refresh_counts();
+        match result {
+            Ok(_) => {
+                let word = if changed == 1 { "family" } else { "families" };
+                self.bulk_note = Some(format!("Turned {} {changed} {word}.", if on { "on" } else { "off" }));
+                self.notice = None;
+            }
+            Err(e) => {
+                self.bulk_note = None;
+                self.notice = Some(e);
+            }
+        }
+    }
+
     pub fn set_text(&mut self, text: String) {
         self.text = text;
     }
@@ -258,6 +335,7 @@ impl FontApp {
     }
 
     fn refresh_counts(&mut self) {
+        self.bulk_cache = None;
         let mut counts = [0; 5];
         for fam in &self.families {
             let on = all_active(&self.active, &self.disabled, fam);
@@ -703,6 +781,60 @@ impl FontApp {
             });
     }
 
+    /// Above the list or grid: how many families are shown and on, and buttons that turn all
+    /// of the shown ones on or off. Big runs ask once first.
+    fn bulk_bar(&mut self, ui: &mut egui::Ui, shown: &[usize]) {
+        self.drop_stale_bulk(shown);
+        let [to_on, to_off, locked] = self.bulk_counts(shown);
+        let on_now = shown.len() - to_on - locked;
+        let (key, store) = (activate::key(), self.store.clone());
+        ui.horizontal(|ui| {
+            let mut text = format!("{} families · {} on", shown.len(), on_now);
+            if locked > 0 {
+                text.push_str(&format!(" · {locked} locked"));
+            }
+            ui.label(RichText::new(text).size(theme::size::SECONDARY).color(color::INK_DIM));
+            ui.add_space(theme::space::S);
+            if let Some((on, _)) = self.pending_bulk.clone() {
+                let n = if on { to_on } else { to_off };
+                let undo = if on { "Turn off" } else { "Turn on" };
+                ui.label(RichText::new(format!("{} {n} fonts? {undo} restores them.", if on { "Turn on" } else { "Turn off" })).size(theme::size::SECONDARY).color(color::INK));
+                if widgets::primary_button(ui, if on { "Turn on" } else { "Turn off" }).clicked() {
+                    self.bulk_in(shown, on, &key, &store);
+                }
+                if widgets::paper_button(ui, "Cancel").clicked() {
+                    self.pending_bulk = None;
+                }
+                return;
+            }
+            for (on, n) in [(true, to_on), (false, to_off)] {
+                if n == 0 {
+                    continue;
+                }
+                let label = format!("{} {n}", if on { "Turn on" } else { "Turn off" });
+                let clicked = if on { widgets::primary_button(ui, &label) } else { widgets::paper_button(ui, &label) }.clicked();
+                if clicked && n > BULK_CONFIRM {
+                    self.pending_bulk = Some((on, shown.to_vec()));
+                } else if clicked {
+                    self.bulk_in(shown, on, &key, &store);
+                }
+            }
+            if let Some(note) = &self.bulk_note {
+                let label = egui::Label::new(RichText::new(note).size(theme::size::SECONDARY).color(color::INK_MUTED)).sense(egui::Sense::click());
+                if ui.add(label).on_hover_text("Click to dismiss").clicked() {
+                    self.bulk_note = None;
+                }
+            }
+        });
+        if let Some(n) = self.notice.clone() {
+            let label = egui::Label::new(RichText::new(n).size(theme::size::SECONDARY).color(color::DANGER)).sense(egui::Sense::click());
+            if ui.add(label).on_hover_text("Click to dismiss").clicked() {
+                self.notice = None;
+            }
+        }
+        ui.add_space(theme::space::S);
+    }
+
     /// One Library or Collections row; clicking the chosen one clears the filter.
     fn collection_row(&mut self, ui: &mut egui::Ui, c: Collection, counts: [usize; 5]) {
         let chosen = self.collection == Some(c);
@@ -737,7 +869,7 @@ impl FontApp {
             return format!("No fonts match \u{201C}{}\u{201D}. Clear the search or pick another source.", self.search);
         }
         match self.collection {
-            Some(Collection::TurnedOn) => "Nothing is turned on yet. Turn a font on from its details panel.".into(),
+            Some(Collection::TurnedOn) => "Nothing is turned on yet. Turn a font on with its switch.".into(),
             Some(Collection::Variable) => "No variable fonts found. Fonts with adjustable weight or width appear here.".into(),
             Some(Collection::ManyWeights) => "No families with more than 3 weights here. Try All fonts.".into(),
             Some(c) => format!("No {} fonts here. Try All fonts.", c.label()),
@@ -795,6 +927,7 @@ impl FontApp {
                     });
                     return;
                 }
+                self.bulk_bar(ui, &visible);
                 egui::ScrollArea::vertical().auto_shrink(false).show_rows(ui, row_h, visible.len(), |ui, range| {
                     for &i in &visible[range] {
                         self.row(ui, i, row_h);
@@ -828,10 +961,13 @@ impl FontApp {
             meta.push_str("   ·   no glyphs for this text");
         }
         painter.text(rect.left_top() + egui::vec2(8.0, 8.0), egui::Align2::LEFT_TOP, meta, FontId::proportional(theme::size::SECONDARY), color::INK_DIM);
-        if on {
-            let status = egui::Rect::from_min_size(rect.right_top() + egui::vec2(-theme::space::M, 8.0), egui::vec2(0.0, 16.0));
-            widgets::status_dot(&painter, status);
-        }
+        let toggled = Self::quick_switch(
+            ui,
+            resp.id.with("switch"),
+            rect.right_top() + egui::vec2(-theme::space::M, 17.0),
+            on,
+            Self::lock(&self.families[i]),
+        );
         let pos = rect.left_top() + egui::vec2(8.0, 28.0);
         match drawn {
             Some(d) => {
@@ -841,9 +977,22 @@ impl FontApp {
                 painter.text(pos, egui::Align2::LEFT_TOP, sample, FontId::proportional(self.size), color::CANVAS_LINE);
             }
         }
-        if resp.clicked() {
+        if toggled {
+            self.toggle(&name);
+        } else if resp.clicked() {
             self.selected = if selected { None } else { Some(name) };
             self.selected_face = 0;
+        }
+    }
+
+    /// The switch for a family, or "Locked" when the system owns its files. True when the switch was clicked.
+    fn quick_switch(ui: &mut egui::Ui, id: egui::Id, right_center: egui::Pos2, on: bool, lock: Option<&'static str>) -> bool {
+        match lock {
+            Some(reason) => {
+                widgets::locked(ui, id, right_center, reason);
+                false
+            }
+            None => widgets::switch(ui, id, right_center, on).on_hover_text(if on { "Turn off" } else { "Turn on" }).clicked(),
         }
     }
 
@@ -861,6 +1010,7 @@ impl FontApp {
                     });
                     return;
                 }
+                self.bulk_bar(ui, &visible);
                 let columns = grid::columns(ui.available_width());
                 let rows = grid::row_count(visible.len(), columns);
                 egui::ScrollArea::vertical().auto_shrink(false).show_rows(ui, grid::row_height(), rows, |ui, range| {
@@ -929,14 +1079,20 @@ impl FontApp {
             FontId::proportional(theme::size::META),
             color::INK_MUTED,
         );
-        if on {
-            let status =
-                egui::Rect::from_min_size(card.right_top() + egui::vec2(-theme::space::S, theme::space::S), egui::vec2(0.0, 16.0));
-            widgets::status_dot(&painter, status);
-        }
         let galley = name_galley(ui.ctx(), &name);
         painter.galley(name_rect.left_top(), galley, color::INK_DIM);
-        if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+        // Off switches only show on hover or selection, so a page of cards stays calm.
+        let toggled = (on || selected || ui.rect_contains_pointer(card))
+            && Self::quick_switch(
+                ui,
+                resp.id.with("switch"),
+                card.right_top() + egui::vec2(-theme::space::S, theme::space::S + 9.0),
+                on,
+                Self::lock(&self.families[i]),
+            );
+        if toggled {
+            self.toggle(&name);
+        } else if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
             self.selected = if selected { None } else { Some(name) };
             self.selected_face = 0;
         }
@@ -1081,6 +1237,9 @@ mod tests {
                 fontbase_files: HashSet::new(),
                 store: PathBuf::new(),
                 notice: None,
+                pending_bulk: None,
+                bulk_note: None,
+                bulk_cache: None,
                 update: None,
                 updates: None,
                 update_error: None,
@@ -1239,6 +1398,42 @@ mod tests {
         app.toggle_in("X", &s.key, &s.store());
         assert!(app.notice.as_deref().is_some_and(|n| n.contains("gone.ttf")));
         assert!(app.active.is_empty());
+    }
+
+    #[test]
+    fn bulk_plan_skips_in_state_and_dedups_shared_files() {
+        let (a, b, c) = (PathBuf::from("a.ttf"), PathBuf::from("b.ttf"), PathBuf::from("shared.ttf"));
+        let mut app = FontApp::for_test(3, vec![sourced(&a, "A", 3), sourced(&b, "B", 3), sourced(&c, "C", 3), sourced(&c, "D", 3)]);
+        app.active.insert(crate::activate::norm(&a)); // A is already on
+        let all: Vec<usize> = (0..app.families.len()).collect();
+        let (files, changed, locked) = app.bulk_plan(&all, true);
+        assert_eq!((changed, locked), (3, 0)); // B, C, D
+        assert_eq!(files, vec![b.clone(), c.clone()]); // the shared file once
+        let (files, changed, _) = app.bulk_plan(&all, false);
+        assert_eq!((changed, files), (1, vec![a])); // only A can turn off
+        assert_eq!(app.bulk_counts(&all), [3, 1, 0]);
+        app.refresh_counts();
+        assert!(app.bulk_cache.is_none()); // state changes drop the cache
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn bulk_plan_counts_locked_families_and_leaves_them_out() {
+        let sys = env_path("WINDIR", r"Fonts\arial.ttf");
+        let app = FontApp::for_test(3, vec![sourced(&sys, "Sys", 0), sourced("u.ttf".as_ref(), "User", 3)]);
+        let (files, changed, locked) = app.bulk_plan(&[0, 1], true);
+        assert_eq!((changed, locked), (1, 1));
+        assert_eq!(files, vec![PathBuf::from("u.ttf")]);
+    }
+
+    #[test]
+    fn pending_bulk_is_dropped_when_the_shown_families_change() {
+        let mut app = FontApp::for_test(3, vec![sourced("a.ttf".as_ref(), "A", 3), sourced("b.ttf".as_ref(), "B", 3)]);
+        app.pending_bulk = Some((true, vec![0, 1]));
+        app.drop_stale_bulk(&[0, 1]);
+        assert!(app.pending_bulk.is_some());
+        app.drop_stale_bulk(&[0]);
+        assert!(app.pending_bulk.is_none());
     }
 
     #[test]

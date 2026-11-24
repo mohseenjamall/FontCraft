@@ -14,7 +14,7 @@ Version 1.2.0
   writing system: Chinese, Japanese, Arabic, Hebrew, Devanagari, Thai and others.
 - **Family details.** Click a family to see every style and a waterfall at 72, 48, 24 and 14 px.
 - **Search and filter** by name or by where the fonts are stored.
-- **Turn fonts on and off.** Pick a family and click **Turn on** or **Turn off**. It works for fonts
+- **Turn fonts on and off.** Flick the switch on any row or card, or use **Turn on N** / **Turn off N** above the list to change every family shown (a search or a collection narrows it). The details panel has the same button. It works for fonts
   from a folder you added, fonts installed for your user, and fonts FontBase turned on. Every Windows
   app (Word, Photoshop, Notepad…) sees the change right away, and it lasts after you sign out or
   restart. Turning a font off never deletes its file: FontCraft keeps its exact Windows settings and

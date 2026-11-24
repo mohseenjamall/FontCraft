@@ -1,4 +1,4 @@
-//! Shared chrome widgets: buttons, a section label, the ruler slider and the status dot.
+//! Shared chrome widgets: buttons, a section label, the ruler slider and the switch.
 use std::ops::RangeInclusive;
 
 use eframe::egui::{self, Color32, FontId, Response, RichText, Stroke};
@@ -171,11 +171,37 @@ fn paint_ticks(painter: &egui::Painter, track: egui::Rect, ruler: egui::Rect, ra
     }
 }
 
-/// An 8 px accent dot with "On" in 11 px text, right-aligned in the rect.
-pub fn status_dot(painter: &egui::Painter, rect: egui::Rect) {
-    let galley = painter.layout_no_wrap("On".to_owned(), FontId::proportional(size::META), color::INK_DIM);
-    let text_pos = egui::pos2(rect.right() - galley.size().x, rect.center().y - galley.size().y / 2.0);
-    let dot = egui::pos2(text_pos.x - space::XS - 4.0, rect.center().y);
-    painter.circle_filled(dot, 4.0, color::COBALT);
-    painter.galley(text_pos, galley, color::INK_DIM);
+const SWITCH_W: f32 = 34.0;
+const SWITCH_H: f32 = 18.0;
+
+/// A pill switch whose right edge is at `right_center`: cobalt with the knob right when on,
+/// a hairline outline with the knob left when off. The click target is a little larger.
+pub fn switch(ui: &mut egui::Ui, id: egui::Id, right_center: egui::Pos2, on: bool) -> Response {
+    let rect = egui::Rect::from_min_size(
+        egui::pos2(right_center.x - SWITCH_W, right_center.y - SWITCH_H / 2.0),
+        egui::vec2(SWITCH_W, SWITCH_H),
+    );
+    let response = ui.interact(rect.expand2(egui::vec2(4.0, 5.0)), id, egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+    let round = SWITCH_H / 2.0;
+    let knob_x = if on { rect.right() - round } else { rect.left() + round };
+    let painter = ui.painter();
+    if on {
+        let fill = if response.hovered() { color::COBALT_HOVER } else { color::COBALT };
+        painter.rect_filled(rect, round, fill);
+        painter.circle_filled(egui::pos2(knob_x, rect.center().y), round - 3.0, Color32::WHITE);
+    } else {
+        let fill = if response.hovered() { color::CANVAS_HOVER } else { Color32::TRANSPARENT };
+        painter.rect(rect, round, fill, Stroke::new(1.0, color::INK_MUTED), egui::StrokeKind::Inside);
+        painter.circle_filled(egui::pos2(knob_x, rect.center().y), round - 4.5, color::INK_MUTED);
+    }
+    response
+}
+
+/// "Locked" in muted text, right-aligned at `right_center`, with the reason on hover (a font
+/// the system owns has no switch).
+pub fn locked(ui: &mut egui::Ui, id: egui::Id, right_center: egui::Pos2, reason: &str) {
+    let galley = ui.painter().layout_no_wrap("Locked".to_owned(), FontId::proportional(size::META), color::INK_MUTED);
+    let rect = egui::Rect::from_min_size(egui::pos2(right_center.x - galley.size().x, right_center.y - galley.size().y / 2.0), galley.size());
+    ui.painter().galley(rect.min, galley, color::INK_MUTED);
+    ui.interact(rect.expand(4.0), id, egui::Sense::hover()).on_hover_text(reason);
 }
