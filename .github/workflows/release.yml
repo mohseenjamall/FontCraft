@@ -27,6 +27,9 @@ jobs:
             exit 1
           fi
           echo "VERSION=${cargo_v}" >> "$GITHUB_ENV"
+      - name: Check the release notes exist
+        shell: bash
+        run: node scripts/check-whats-new.mjs
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           targets: ${{ matrix.target }}

@@ -62,6 +62,18 @@ before returning, so it stays unread. It is the browser's page default, not Font
 | No answer | offline, blocked, no curl, private repo (404) → no banner, no error | `update::check` |
 | Checks | `--screenshot` runs skip the network unless `FONTCRAFT_LATEST=<tag>` stands in for GitHub's answer | `main.rs` |
 
+### What's new banner (`src/whats_new.rs`)
+
+| Rule | Value | Source |
+|---|---|---|
+| Notes | `assets/whats-new.md`, one `## <version>` section of `- ` bullets each, built into the program | `whats_new::NOTES`, `whats_new::parse_notes` |
+| When | first start of a newer version than the one saved in `seen_version.txt` (next to `folders.txt`); only the running version's notes show, even if versions were skipped | `whats_new::should_show` |
+| Once | the version is saved at start, so the banner shows once even if closed without clicking | `app::start_notes` |
+| Never | a fresh install (no or unreadable file), the same version, a downgrade, or a version with no notes | `whats_new::on_start` |
+| Banner | white card above the list: "New in <version>", the bullets, **Got it** (closes it) and **Full release notes** (that version's release page, same trusted-link rule as the update notice) | `app::whats_new_banner`, `update::release_page` |
+| Release guard | `scripts/check-whats-new.mjs` fails CI and the release workflow when `Cargo.toml`'s version has no section with 1 to 6 bullets | `scripts/check-whats-new.mjs` |
+| Screenshots | `--whats-new` forces the banner | `main.rs` |
+
 ## JavaScript bundle
 
 | Rule | Value | Where it was read |

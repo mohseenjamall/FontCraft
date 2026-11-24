@@ -74,7 +74,10 @@ Run the tests with `cargo test`.
 
 ## Publishing an update
 
-1. Raise `version` in `Cargo.toml` (for example `1.1.0`) and build with `cargo build --release`.
+1. Raise `version` in `Cargo.toml` (for example `1.1.0`) and, in the same change, add a `## 1.1.0` section of 3 to 6
+   short bullets to `assets/whats-new.md`. People see it once, as a "New in 1.1.0" banner, the first time they start the
+   new version. `node scripts/check-whats-new.mjs` (run by CI and the release workflow) fails when the section is missing.
+   Then build with `cargo build --release`.
 2. On GitHub, create a release whose tag is that version with a `v` in front (`v1.1.0`) and attach
    the program. Pushing a `v*` tag does this for you: `.github/workflows/release.yml` builds
    `FontCraft-<version>-windows-x64.exe` (and `.zip`), `FontCraft-<version>-linux-x64` and
