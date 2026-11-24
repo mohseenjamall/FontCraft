@@ -74,6 +74,19 @@ before returning, so it stays unread. It is the browser's page default, not Font
 | Release guard | `scripts/check-whats-new.mjs` fails CI and the release workflow when `Cargo.toml`'s version has no section with 1 to 6 bullets | `scripts/check-whats-new.mjs` |
 | Screenshots | `--whats-new` forces the banner | `main.rs` |
 
+## Windows installer (`packaging/windows/FontCraft.iss`)
+
+The setup exe (`FontCraft-<version>-windows-x64-setup.exe`) is built with Inno Setup. It installs
+only for the current user, so the in-app updater keeps write access to the program folder.
+
+| Rule | Value | Source |
+|---|---|---|
+| Install folder | `%LOCALAPPDATA%\Programs\FontCraft` (per user, no administrator, so the in-app update can replace the exe) | `packaging/windows/FontCraft.iss` |
+| Shortcuts | Start menu, optional desktop | `packaging/windows/FontCraft.iss` |
+| App identity | `mohseenjamall.FontCraft` (AppUserModelID) | `packaging/windows/FontCraft.iss` |
+| Uninstall | removes the program, keeps `%APPDATA%\FontCraft` settings and never touches fonts | `packaging/windows/FontCraft.iss` |
+| Built by | `packaging/windows/FontCraft.iss`, run by the release workflow | `.github/workflows/release.yml` |
+
 ## JavaScript bundle
 
 | Rule | Value | Where it was read |

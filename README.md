@@ -35,6 +35,22 @@ Version 1.2.0
   ready about 4× sooner and uses about 7× less memory. See [EVALUATION.md](EVALUATION.md) for the
   full speed test (re-run it with `bench.ps1`).
 
+## Install on Windows
+
+Windows 10 or 11, 64-bit.
+
+1. Download `FontCraft-<version>-windows-x64-setup.exe` from the
+   [latest release](https://github.com/mohseenjamall/FontCraft/releases/latest).
+2. Run it. It installs for your user only (no administrator needed), adds a Start menu shortcut
+   (and an optional desktop one) and appears in Settings > Apps. Running a newer setup file
+   upgrades in place.
+
+Or skip the installer: the portable `FontCraft-<version>-windows-x64.exe` (or its `.zip`) runs
+from wherever you put it, with no install.
+
+When a newer version is out, the update bar's **Update now** replaces the program where it is
+installed, so an installed copy keeps its shortcuts.
+
 ## Install on macOS
 
 macOS 11 or later, Apple Silicon or Intel.
@@ -80,7 +96,9 @@ Run the tests with `cargo test`.
    Then build with `cargo build --release`.
 2. On GitHub, create a release whose tag is that version with a `v` in front (`v1.1.0`) and attach
    the program. Pushing a `v*` tag does this for you: `.github/workflows/release.yml` builds
-   `FontCraft-<version>-windows-x64.exe` (and `.zip`), `FontCraft-<version>-linux-x64` and
+   `FontCraft-<version>-windows-x64-setup.exe` (the installer),
+   `FontCraft-<version>-windows-x64.exe` (portable, and its `.zip`),
+   `FontCraft-<version>-linux-x64` and
    `FontCraft-<version>-macos.dmg` (one universal app for Apple Silicon and Intel, built by
    `.github/workflows/macos-build.yml`), adds `SHA256SUMS.txt` and creates the release.
 3. Windows has no code signing, so installing from a browser shows "Unknown publisher". `winget install` avoids the warning: after the release exists, run `node scripts/winget-manifest.mjs <version> SHA256SUMS.txt`, copy `packaging/winget/<version>/` to `manifests/m/mohseenjamall/FontCraft/<version>/` in a fork of `microsoft/winget-pkgs` and open a pull request.

@@ -24,3 +24,22 @@ test('null/undefined assets -> undefined', () => {
   assert.equal(pickAsset(undefined, 'windows'), undefined);
   assert.equal(pickAsset(null, 'linux'), undefined);
 });
+
+const withSetup = [
+  'FontCraft-1.4.0-windows-x64-setup.exe',
+  'FontCraft-1.4.0-windows-x64.exe',
+  'FontCraft-1.4.0-windows-x64.zip',
+  'SHA256SUMS.txt',
+].map((name) => ({ name }));
+
+test('windows prefers the setup file when both exist', () =>
+  assert.equal(pickAsset(withSetup, 'windows').name, 'FontCraft-1.4.0-windows-x64-setup.exe'));
+
+test('windows falls back to the portable exe when there is no setup file', () =>
+  assert.equal(pickAsset(assets, 'windows').name, 'FontCraft-1.2.0-windows-x64.exe'));
+
+test('setup file is never picked for linux or mac', () => {
+  const only = [{ name: 'FontCraft-1.4.0-windows-x64-setup.exe' }];
+  assert.equal(pickAsset(only, 'linux'), undefined);
+  assert.equal(pickAsset(only, 'mac'), undefined);
+});
