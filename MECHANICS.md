@@ -57,10 +57,22 @@ before returning, so it stays unread. It is the browser's page default, not Font
 | When | once per start, on a background thread, `curl.exe -s --max-time 10`, no console window | FontCraft decision |
 | Newer | `vMAJOR.MINOR.PATCH` (leading `v` optional, missing parts 0, `-`/`+` suffix ignored) strictly above `CARGO_PKG_VERSION` | `update::is_newer` |
 | Trusted link | the button only opens URLs starting `https://github.com/mohseenjamall/FontCraft/releases/` with no spaces, quotes, backslashes or `..` | `update::trusted` |
-| Banner | top bar in the accent colour, cannot be closed: "Update required: FontCraft <version> is available. Please update now." + Download update | `app::update_banner` |
+| Banner | top bar in the accent colour, cannot be closed: "FontCraft <version> is available." + Download update and What's new (the release page) | `app::update_banner` |
 | macOS install | never replaces itself (inside a signed `FontCraft.app` that would break the signature); the banner's **Download update** opens `…/releases/download/v<version>/FontCraft-<version>-macos.dmg` | `update::installs_in_place`, `update::download_url` |
 | No answer | offline, blocked, no curl, private repo (404) → no banner, no error | `update::check` |
 | Checks | `--screenshot` runs skip the network unless `FONTCRAFT_LATEST=<tag>` stands in for GitHub's answer | `main.rs` |
+
+### What's new banner (`src/whats_new.rs`)
+
+| Rule | Value | Source |
+|---|---|---|
+| Notes | `assets/whats-new.md`, one `## <version>` section of `- ` bullets each, built into the program | `whats_new::NOTES`, `whats_new::parse_notes` |
+| When | first start of a newer version than the one saved in `seen_version.txt` (next to `folders.txt`); only the running version's notes show, even if versions were skipped | `whats_new::should_show` |
+| Once | the version is saved at start, so the banner shows once even if closed without clicking | `app::start_notes` |
+| Never | a fresh install (no or unreadable file), the same version, a downgrade, or a version with no notes | `whats_new::on_start` |
+| Banner | white card above the list: "New in <version>", the bullets, **Got it** (closes it) and **Full release notes** (that version's release page, same trusted-link rule as the update notice) | `app::whats_new_banner`, `update::release_page` |
+| Release guard | `scripts/check-whats-new.mjs` fails CI and the release workflow when `Cargo.toml`'s version has no section with 1 to 6 bullets | `scripts/check-whats-new.mjs` |
+| Screenshots | `--whats-new` forces the banner | `main.rs` |
 
 ## JavaScript bundle
 

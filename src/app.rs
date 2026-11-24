@@ -7,16 +7,16 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use eframe::egui::{self, Color32, FontId, RichText};
 
 use crate::activate;
+use crate::collections::Collection;
 use crate::fonts::FontLoader;
+use crate::grid;
 use crate::scan::{self, Face};
+use crate::theme::{self, color};
+use crate::widgets;
 
-// Theme colours and slider limits read from FontBase's style.css / app.js (see MECHANICS.md).
-const HEADER_BG: Color32 = Color32::from_rgb(0x11, 0x11, 0x11);
-const SIDE_BG: Color32 = Color32::from_rgb(0x18, 0x18, 0x18);
-const MAIN_BG: Color32 = Color32::from_rgb(0xFA, 0xFA, 0xFA);
-const TEXT_LIGHT: Color32 = Color32::from_rgb(0xE7, 0xE7, 0xE7);
-const TEXT_MAIN: Color32 = Color32::from_rgb(0x22, 0x22, 0x22);
-const ACTION: Color32 = Color32::from_rgb(0x52, 0x00, 0xEA);
+// Slider limits read from FontBase's style.css / app.js (see MECHANICS.md).
+/// A bulk turn on/off over more families than this asks first.
+const BULK_CONFIRM: usize = 50;
 const SIZE_MIN: f32 = 6.0;
 const SIZE_MAX: f32 = 180.0;
 const SIZE_STEP: f64 = 2.0;
@@ -26,9 +26,26 @@ const WATERFALL: [f32; 4] = [72.0, 48.0, 24.0, 14.0];
 pub struct Family {
     pub name: String,
     pub faces: Vec<Face>,
+    /// Scripts any face supports, whether any face is variable, and how many different weights it has.
+    pub scripts: u16,
+    pub variable: bool,
+    pub weight_count: usize,
 }
 
 impl Family {
+    pub fn new(name: String, faces: Vec<Face>) -> Self {
+        let mut weights: Vec<u16> = faces.iter().map(|f| f.weight).collect();
+        weights.sort_unstable();
+        weights.dedup();
+        Self {
+            name,
+            scripts: faces.iter().fold(0, |m, f| m | f.scripts),
+            variable: faces.iter().any(|f| f.variable),
+            weight_count: weights.len(),
+            faces,
+        }
+    }
+
     /// The face shown in the list: closest to Regular (400, upright).
     fn main_face(&self) -> &Face {
         self.faces
@@ -86,6 +103,12 @@ pub struct FontApp {
     size: f32,
     search: String,
     source: Option<usize>,
+    /// A Library or Collections filter; exclusive with `source`.
+    collection: Option<Collection>,
+    /// Families per [`Collection::ALL`] entry, refreshed when families or the on/off state change.
+    counts: [usize; 5],
+    /// Whether the families show as a list or as a grid of cards.
+    view: grid::View,
     selected: Option<String>,
     selected_face: usize,
     /// Files on for this user through the registry (installed, FontCraft or FontBase), `norm` keys.
@@ -98,6 +121,14 @@ pub struct FontApp {
     store: PathBuf,
     /// Last activation error, shown under the toggle until clicked away.
     notice: Option<String>,
+    /// A bulk run waiting for a yes (`true` = turn on) and the families it would cover.
+    pending_bulk: Option<(bool, Vec<usize>)>,
+    /// What the last bulk run did, shown in the bulk bar until clicked away.
+    bulk_note: Option<String>,
+    /// (to turn on, to turn off, locked) for the families last shown; dropped when on/off state changes.
+    bulk_cache: Option<(Vec<usize>, [usize; 3])>,
+    /// The notes for the version just installed, shown as a banner until "Got it".
+    whats_new: Option<Vec<String>>,
     /// A newer release, once the background check finds one; shown as a banner that stays.
     update: Option<crate::update::Update>,
     updates: Option<Receiver<crate::update::Update>>,
@@ -112,12 +143,12 @@ pub struct FontApp {
 
 impl FontApp {
     pub fn new(ctx: &egui::Context) -> Self {
-        ctx.set_visuals(egui::Visuals::light());
+        crate::theme::apply(ctx);
         crate::fonts::add_system_fallback(ctx);
         let mut sources = scan::system_folders();
         let activated = sources.len();
         // Fonts FontBase activated from other folders (scanned file by file).
-        let label = if cfg!(windows) { "Activated by FontBase" } else { "Turned on by FontCraft" };
+        let label = if cfg!(windows) { "From FontBase" } else { "Turned on by FontCraft" };
         sources.push((label.into(), PathBuf::new()));
         sources.extend(crate::store::load_folders().into_iter().map(|p| (folder_label(&p), p)));
         let mut jobs: Vec<(usize, PathBuf)> =
@@ -141,6 +172,9 @@ impl FontApp {
             size: SIZE_DEFAULT,
             search: String::new(),
             source: None,
+            collection: None,
+            counts: [0; 5],
+            view: crate::store::load_view(),
             selected: None,
             selected_face: 0,
             active: activate::read_active(&activate::key()),
@@ -148,6 +182,10 @@ impl FontApp {
             fontbase_files: fontbase_files(&store),
             store,
             notice: None,
+            pending_bulk: None,
+            bulk_note: None,
+            bulk_cache: None,
+            whats_new: Self::start_notes(),
             update: None,
             updates: None,
             update_error: None,
@@ -162,6 +200,22 @@ impl FontApp {
         self.updates = Some(crate::update::spawn_check(ctx.clone()));
     }
 
+
+    /// Notes to show on this start, and remembers the running version. Shown means seen: it
+    /// appears once even if the app is closed without clicking.
+    fn start_notes() -> Option<Vec<String>> {
+        let current = env!("CARGO_PKG_VERSION");
+        let start = crate::whats_new::on_start(crate::store::load_seen_version().as_deref(), current, crate::whats_new::NOTES);
+        if start.save_version {
+            crate::store::save_seen_version(current);
+        }
+        start.notes
+    }
+
+    /// Forces the current version's notes on screen (used with --screenshot).
+    pub fn show_whats_new(&mut self) {
+        self.whats_new = crate::whats_new::parse_notes(crate::whats_new::NOTES, env!("CARGO_PKG_VERSION"));
+    }
 
     /// Shows one family: its details panel open and the list searched down to it.
     pub fn open_family(&mut self, name: String) {
@@ -200,10 +254,120 @@ impl FontApp {
         self.active = activate::read_active(key);
         self.disabled = activate::read_disabled(store);
         self.notice = result.err();
+        self.refresh_counts();
+    }
+
+    /// Files to change, families that change and locked families skipped, for a bulk run over
+    /// `shown` (indexes into `families`). Families already in the wanted state are left out;
+    /// a file shared by several families appears once.
+    fn bulk_plan(&self, shown: &[usize], on: bool) -> (Vec<PathBuf>, usize, usize) {
+        let (mut files, mut changed, mut locked) = (Vec::new(), 0, 0);
+        for &i in shown {
+            let fam = &self.families[i];
+            if !self.can_toggle(fam) {
+                locked += 1;
+            } else if all_active(&self.active, &self.disabled, fam) != on {
+                files.extend(fam.files());
+                changed += 1;
+            }
+        }
+        files.sort();
+        files.dedup();
+        (files, changed, locked)
+    }
+
+    /// (to turn on, to turn off, locked) for `shown`, cached until the on/off state changes.
+    fn bulk_counts(&mut self, shown: &[usize]) -> [usize; 3] {
+        if let Some((cached, counts)) = &self.bulk_cache
+            && cached == shown
+        {
+            return *counts;
+        }
+        let (_, to_on, locked) = self.bulk_plan(shown, true);
+        let (_, to_off, _) = self.bulk_plan(shown, false);
+        let counts = [to_on, to_off, locked];
+        self.bulk_cache = Some((shown.to_vec(), counts));
+        counts
+    }
+
+    /// Forgets a pending bulk run when the families shown are no longer the ones it was asked for.
+    fn drop_stale_bulk(&mut self, shown: &[usize]) {
+        if self.pending_bulk.as_ref().is_some_and(|(_, s)| s != shown) {
+            self.pending_bulk = None;
+        }
+    }
+
+    /// Turns every family in `shown` on (or off) in one call, so Windows is told once. Locked
+    /// families are skipped. Errors go to `notice`; a success to `bulk_note`.
+    fn bulk_in(&mut self, shown: &[usize], on: bool, key: &str, store: &std::path::Path) {
+        self.pending_bulk = None;
+        let (files, changed, _) = self.bulk_plan(shown, on);
+        if changed == 0 {
+            return;
+        }
+        let result = if on { activate::turn_on_in(key, store, &files) } else { activate::turn_off_in(key, store, &files) };
+        // Re-read even on error: a batch can fail after some files already changed.
+        self.active = activate::read_active(key);
+        self.disabled = activate::read_disabled(store);
+        self.refresh_counts();
+        match result {
+            Ok(_) => {
+                let word = if changed == 1 { "family" } else { "families" };
+                self.bulk_note = Some(format!("Turned {} {changed} {word}.", if on { "on" } else { "off" }));
+                self.notice = None;
+            }
+            Err(e) => {
+                self.bulk_note = None;
+                self.notice = Some(e);
+            }
+        }
     }
 
     pub fn set_text(&mut self, text: String) {
         self.text = text;
+    }
+
+    /// Shows the families as a list or as a grid of cards.
+    pub fn set_view(&mut self, v: grid::View) {
+        self.view = v;
+    }
+
+    /// Picks a Library or Collections filter (or clears it); it replaces any chosen folder.
+    pub fn set_collection(&mut self, c: Option<Collection>) {
+        self.collection = c;
+        if c.is_some() {
+            self.source = None;
+        }
+    }
+
+    /// Picks a folder source (or clears it); it replaces any chosen collection.
+    pub fn set_source(&mut self, s: Option<usize>) {
+        self.source = s;
+        if s.is_some() {
+            self.collection = None;
+        }
+    }
+
+    /// Families per collection, as of the last scan result or on/off change.
+    pub fn collection_counts(&self) -> [usize; 5] {
+        self.counts
+    }
+
+    fn refresh_counts(&mut self) {
+        self.bulk_cache = None;
+        let mut counts = [0; 5];
+        for fam in &self.families {
+            let on = all_active(&self.active, &self.disabled, fam);
+            for c in Collection::ALL {
+                counts[c.index()] += usize::from(c.contains(fam, on));
+            }
+        }
+        self.counts = counts;
+    }
+
+    /// Scripts the typed preview text needs a font to support (list view only; the grid ignores the text).
+    pub fn text_need(&self) -> u16 {
+        if self.view == grid::View::List { crate::samples::scripts_in(&self.text) } else { 0 }
     }
 
     /// True once every font is listed and every visible preview has its typeface.
@@ -226,7 +390,43 @@ impl FontApp {
         if !new.is_empty() {
             self.faces.extend(new);
             self.families = group(&self.faces);
+            self.refresh_counts();
         }
+    }
+
+    /// Forgets an added folder: the saved list, its fonts and its row. Files on disk and the on/off
+    /// state of fonts are never touched. Built-in sources can't be removed.
+    fn remove_folder(&mut self, source: usize) {
+        if self.drop_source(source) {
+            crate::store::save_folders(&self.sources.iter().skip(self.fixed_sources).map(|(_, p)| p.clone()).collect::<Vec<_>>());
+        }
+    }
+
+    /// The in-memory part of [`FontApp::remove_folder`]: drops the source and its faces, shifts later
+    /// sources down by one and repairs the chosen folder and the selection.
+    fn drop_source(&mut self, source: usize) -> bool {
+        if source < self.fixed_sources || source >= self.sources.len() {
+            return false;
+        }
+        self.sources.remove(source);
+        self.faces.retain(|f| f.source != source);
+        for f in &mut self.faces {
+            if f.source > source {
+                f.source -= 1;
+            }
+        }
+        self.source = match self.source {
+            Some(s) if s == source => None,
+            Some(s) if s > source => Some(s - 1),
+            other => other,
+        };
+        self.families = group(&self.faces);
+        self.refresh_counts();
+        if self.selected.as_ref().is_some_and(|name| !self.families.iter().any(|f| &f.name == name)) {
+            self.selected = None;
+            self.selected_face = 0;
+        }
+        true
     }
 
     fn add_folder(&mut self, dir: PathBuf) {
@@ -238,29 +438,24 @@ impl FontApp {
         crate::store::save_folders(&self.sources.iter().skip(self.fixed_sources).map(|(_, p)| p.clone()).collect::<Vec<_>>());
         self.scan.start(vec![(index, dir)]);
         self.scan_done = false;
-        self.source = Some(index);
+        self.set_source(Some(index));
     }
 
     fn visible(&self) -> Vec<usize> {
         let needle = self.search.to_lowercase();
+        let need = self.text_need();
         (0..self.families.len())
             .filter(|&i| {
                 let f = &self.families[i];
                 f.name.to_lowercase().contains(&needle)
                     && self.source.is_none_or(|s| f.faces.iter().any(|x| x.source == s))
+                    && self.collection.is_none_or(|c| {
+                        c.contains(f, c == Collection::TurnedOn && all_active(&self.active, &self.disabled, f))
+                    })
+                    && f.scripts & need == need
             })
             .collect()
     }
-}
-
-/// Dark controls for the header and sidebar, with FontBase's accent for selection.
-fn dark_visuals() -> egui::Visuals {
-    let mut v = egui::Visuals::dark();
-    v.override_text_color = Some(TEXT_LIGHT);
-    v.extreme_bg_color = Color32::from_rgb(0x21, 0x21, 0x21);
-    v.selection.bg_fill = ACTION;
-    v.selection.stroke.color = Color32::WHITE;
-    v
 }
 
 /// How to draw a sample: in the face itself, or dimmed in the fallback font when the face lacks a letter.
@@ -275,12 +470,85 @@ fn pick_font(ctx: &egui::Context, family: egui::FontFamily, sample: &str, size: 
     if ctx.fonts_mut(|f| f.has_glyphs(&own, sample)) {
         Drawn { font: own, color: ink, has_all: true }
     } else {
-        Drawn { font: FontId::proportional(size), color: Color32::from_gray(0xB8), has_all: false }
+        Drawn { font: FontId::proportional(size), color: color::INK_MUTED, has_all: false }
     }
 }
 
 fn folder_label(p: &std::path::Path) -> String {
     p.file_name().map_or_else(|| p.display().to_string(), |n| n.to_string_lossy().into_owned())
+}
+
+/// A family name laid out to at most two lines inside a card width, cut with an ellipsis when
+/// it would need more.
+fn name_galley(ctx: &egui::Context, name: &str) -> std::sync::Arc<egui::Galley> {
+    let font = FontId::proportional(theme::size::SECONDARY);
+    let layout = |s: String| ctx.fonts_mut(|f| f.layout(s, font.clone(), color::INK_DIM, grid::CARD_SIZE));
+    let galley = layout(name.to_owned());
+    if galley.rows.len() <= 2 {
+        return galley;
+    }
+    let chars: Vec<char> = name.chars().collect();
+    for cut in (0..chars.len()).rev() {
+        let mut s: String = chars[..cut].iter().collect();
+        s.push('…');
+        let short = layout(s);
+        if short.rows.len() <= 2 {
+            return short;
+        }
+    }
+    layout("…".to_owned())
+}
+
+/// A sidebar row: label left, count right in mono, 32 high with a quiet selection.
+fn source_row(ui: &mut egui::Ui, label: &str, count: usize, selected: bool) -> egui::Response {
+    sidebar_row(ui, label, count, selected, false).0
+}
+
+/// A sidebar row; when `removable`, hovering it swaps the count for a remove control.
+/// Returns the row's response and whether the remove control was used (click, or Delete while focused).
+fn sidebar_row(ui: &mut egui::Ui, label: &str, count: usize, selected: bool, removable: bool) -> (egui::Response, bool) {
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), theme::ROW_HEIGHT), egui::Sense::click());
+    let over = removable && ui.rect_contains_pointer(rect);
+    let painter = ui.painter();
+    if selected {
+        painter.rect(
+            rect,
+            theme::radius::CONTROL,
+            color::CHROME_RAISED,
+            egui::Stroke::new(1.0, color::CHROME_LINE),
+            egui::StrokeKind::Inside,
+        );
+    } else if response.hovered() {
+        painter.rect_filled(rect, theme::radius::CONTROL, color::CHROME_HOVER);
+    }
+    let text_color = if selected { color::CHROME_TEXT } else { color::CHROME_TEXT_DIM };
+    // shortcut: a long label is clipped before the count, no ellipsis; upgrade if names get truncated often.
+    let label_area = egui::Rect::from_min_max(rect.min, egui::pos2(rect.right() - 40.0, rect.max.y));
+    painter.with_clip_rect(label_area).text(
+        egui::pos2(rect.left() + theme::space::S, rect.center().y),
+        egui::Align2::LEFT_CENTER,
+        label,
+        egui::FontId::proportional(theme::size::BODY),
+        text_color,
+    );
+    let mut removed = removable && response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Delete));
+    if over {
+        let target = egui::Rect::from_center_size(egui::pos2(rect.right() - 16.0, rect.center().y), egui::vec2(24.0, 24.0));
+        let button = ui.interact(target, response.id.with("remove"), egui::Sense::click());
+        let tint = if button.hovered() { color::CHROME_TEXT } else { color::CHROME_TEXT_MUTED };
+        ui.painter().text(target.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(theme::size::TITLE), tint);
+        removed |= button.on_hover_text("Remove folder").clicked();
+    } else {
+        ui.painter().text(
+            egui::pos2(rect.right() - theme::space::S, rect.center().y),
+            egui::Align2::RIGHT_CENTER,
+            count.to_string(),
+            egui::FontId::new(theme::size::META, theme::mono()),
+            color::CHROME_TEXT_MUTED,
+        );
+    }
+    (response.on_hover_cursor(egui::CursorIcon::PointingHand), removed)
 }
 
 /// Background scans feeding one stream of faces; `pending` counts scans still running.
@@ -319,19 +587,17 @@ impl Scans {
 
 /// Groups faces into families, sorted by name; styles ordered upright-first by weight.
 pub fn group(faces: &[Face]) -> Vec<Family> {
-    let mut map: std::collections::BTreeMap<String, Family> = Default::default();
+    let mut map: std::collections::BTreeMap<String, (String, Vec<Face>)> = Default::default();
     for f in faces {
-        map.entry(f.family.to_lowercase())
-            .or_insert_with(|| Family { name: f.family.clone(), faces: Vec::new() })
-            .faces
-            .push(f.clone());
+        map.entry(f.family.to_lowercase()).or_insert_with(|| (f.family.clone(), Vec::new())).1.push(f.clone());
     }
-    let mut out: Vec<Family> = map.into_values().collect();
-    for fam in &mut out {
-        fam.faces.sort_by_key(|f| (f.weight, f.italic));
-        fam.faces.dedup_by(|a, b| a.style == b.style && a.weight == b.weight && a.italic == b.italic);
-    }
-    out
+    map.into_values()
+        .map(|(name, mut faces)| {
+            faces.sort_by_key(|f| (f.weight, f.italic));
+            faces.dedup_by(|a, b| a.style == b.style && a.weight == b.weight && a.italic == b.italic);
+            Family::new(name, faces)
+        })
+        .collect()
 }
 
 impl eframe::App for FontApp {
@@ -350,15 +616,50 @@ impl eframe::App for FontApp {
         self.header(ui);
         self.sidebar(ui);
         self.details(ui);
+        self.whats_new_banner(ui);
         self.list(ui);
     }
 }
 
 impl FontApp {
+    /// Once, after an update: what changed. It sits above the list and never blocks it.
+    fn whats_new_banner(&mut self, ui: &mut egui::Ui) {
+        let Some(notes) = self.whats_new.clone() else { return };
+        let version = env!("CARGO_PKG_VERSION");
+        egui::Panel::top("whats_new")
+            .frame(
+                egui::Frame::NONE
+                    .fill(color::CARD)
+                    .stroke(egui::Stroke::new(1.0, color::CANVAS_LINE))
+                    .inner_margin(egui::Margin::same(16)),
+            )
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(format!("New in {version}")).font(FontId::new(15.0, theme::medium())).color(color::COBALT));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if widgets::primary_button(ui, "Got it").clicked() {
+                            self.dismiss_whats_new();
+                        }
+                        if widgets::link(ui, "Full release notes").clicked() {
+                            self.notice = crate::update::open(&crate::update::release_page(version)).err();
+                        }
+                    });
+                });
+                ui.add_space(theme::space::XS);
+                for note in &notes {
+                    ui.add(egui::Label::new(RichText::new(format!("•  {note}")).size(13.0).color(color::INK_DIM)).wrap());
+                }
+            });
+    }
+
+    fn dismiss_whats_new(&mut self) {
+        self.whats_new = None;
+    }
+
     /// Topmost bar while a newer release exists; it can't be closed, only acted on.
     fn update_banner(&mut self, ui: &mut egui::Ui) {
         let Some(update) = self.update.clone() else { return };
-        let (text, url) = (format!("Update required: FontCraft {} is available. Please update now.", update.version), update.url.clone());
+        let (text, url) = (format!("FontCraft {} is available.", update.version), update.url.clone());
         let ctx = ui.ctx().clone();
         if let Some(done) = self.installing.as_ref().and_then(|rx| rx.try_recv().ok()) {
             self.installing = None;
@@ -368,17 +669,24 @@ impl FontApp {
             }
         }
         egui::Panel::top("update")
-            .frame(egui::Frame::NONE.fill(ACTION).inner_margin(egui::Margin::symmetric(16, 8)))
+            .frame(egui::Frame::NONE.fill(color::COBALT).inner_margin(egui::Margin::symmetric(16, 8)))
             .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(text).color(Color32::WHITE).strong());
+                ui.horizontal_centered(|ui| {
+                    ui.label(RichText::new(text).color(Color32::WHITE));
                     if self.installing.is_some() {
                         ui.spinner();
                         ui.label(RichText::new("Downloading the update…").color(Color32::WHITE));
                     } else {
                         let in_place = crate::update::installs_in_place();
                         let label = if in_place { "Update now" } else { "Download update" };
-                        let button = egui::Button::new(RichText::new(label).color(ACTION).strong()).fill(Color32::WHITE);
+                        let button = egui::Button::new(
+                            RichText::new(label)
+                                .font(FontId::new(theme::size::BODY, theme::medium()))
+                                .color(color::COBALT),
+                        )
+                        .fill(Color32::WHITE)
+                        .corner_radius(theme::radius::CONTROL)
+                        .min_size(egui::vec2(0.0, 28.0));
                         if ui.add(button).clicked() {
                             self.update_error = None;
                             if in_place {
@@ -388,7 +696,11 @@ impl FontApp {
                                 self.update_error = crate::update::open(&crate::update::download_url(&update)).err();
                             }
                         }
-                        let page = egui::Button::new(RichText::new("Release page").color(Color32::WHITE)).fill(ACTION);
+                        let page = egui::Button::new(RichText::new("What's new").color(Color32::WHITE))
+                            .fill(Color32::TRANSPARENT)
+                            .stroke(egui::Stroke::new(1.0, Color32::WHITE))
+                            .corner_radius(theme::radius::CONTROL)
+                            .min_size(egui::vec2(0.0, 28.0));
                         if ui.add(page).clicked() {
                             self.update_error = crate::update::open(&url).err();
                         }
@@ -402,98 +714,274 @@ impl FontApp {
 
     fn header(&mut self, ui: &mut egui::Ui) {
         egui::Panel::top("header")
-            .frame(egui::Frame::NONE.fill(HEADER_BG).inner_margin(egui::Margin::symmetric(16, 10)))
+            .exact_size(theme::HEADER_HEIGHT)
+            .frame(egui::Frame::NONE.fill(color::HEADER).inner_margin(egui::Margin::symmetric(16, 8)))
             .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    *ui.visuals_mut() = dark_visuals();
-                    let width = ui.available_width() * 0.5;
-                    ui.add(egui::TextEdit::singleline(&mut self.text).hint_text("Type something to preview…").desired_width(width));
-                    ui.add_space(12.0);
-                    ui.label("Size");
+                ui.horizontal_centered(|ui| {
+                    *ui.visuals_mut() = theme::chrome_visuals();
+                    let in_list = self.view == grid::View::List;
+                    // Narrow windows shrink the controls and drop the "Size" label so nothing is pushed out of the header.
+                    let avail = ui.available_width();
+                    let (slider_w, search_w, show_label) = if avail < 800.0 {
+                        (64.0, 120.0, false)
+                    } else if avail < 900.0 {
+                        (64.0, 120.0, true)
+                    } else {
+                        (100.0, 180.0, true)
+                    };
+                    let gaps = 4.0 * theme::space::M;
+                    let label_w = if show_label { 40.0 } else { 0.0 };
+                    let width = (avail - label_w - slider_w - 70.0 - 100.0 - search_w - gaps).max(100.0);
+                    // The preview text and the size only drive the list, so the grid hides them.
+                    if in_list {
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.text)
+                                .hint_text("Type something to preview…")
+                                .desired_width(width)
+                                .min_size(egui::vec2(0.0, 28.0))
+                                .align(egui::Align2::LEFT_CENTER)
+                                .background_color(color::CHROME_RAISED),
+                        );
+                        ui.add_space(theme::space::M);
+                        ui.scope(|ui| {
+                            ui.spacing_mut().slider_width = slider_w;
+                            if show_label {
+                                ui.label(RichText::new("Size").color(color::CHROME_TEXT_DIM));
+                            }
+                            widgets::ruler_slider(ui, &mut self.size, SIZE_MIN..=SIZE_MAX, SIZE_STEP);
+                        });
+                        ui.add_space(theme::space::M);
+                    }
+                    if let Some(i) = widgets::segmented(ui, &["List", "Grid"], if in_list { 0 } else { 1 }) {
+                        let view = if i == 1 { grid::View::Grid } else { grid::View::List };
+                        self.set_view(view);
+                        crate::store::save_view(view);
+                    }
+                    ui.add_space(theme::space::M);
                     ui.add(
-                        egui::Slider::new(&mut self.size, SIZE_MIN..=SIZE_MAX)
-                            .step_by(SIZE_STEP)
-                            .suffix(" px"),
+                        egui::TextEdit::singleline(&mut self.search)
+                            .hint_text("Search fonts")
+                            .desired_width(search_w)
+                            .min_size(egui::vec2(0.0, 28.0))
+                            .align(egui::Align2::LEFT_CENTER)
+                            .background_color(color::CHROME_RAISED),
                     );
-                    ui.add_space(12.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("Search fonts").desired_width(180.0));
                 });
             });
     }
 
     fn sidebar(&mut self, ui: &mut egui::Ui) {
+        let counts = self.collection_counts();
         egui::Panel::left("sources")
-            .exact_size(220.0)
-            .frame(egui::Frame::NONE.fill(SIDE_BG).inner_margin(egui::Margin::symmetric(12, 14)))
+            .exact_size(if ui.available_width() < 800.0 { 200.0 } else { 220.0 })
+            .frame(egui::Frame::NONE.fill(color::SIDEBAR).inner_margin(egui::Margin::same(16)))
             .show(ui, |ui| {
-                *ui.visuals_mut() = dark_visuals();
-                ui.label(RichText::new("FONTS").size(11.0).color(Color32::GRAY));
-                ui.add_space(6.0);
-                let all = format!("All fonts  {}", self.families.len());
-                if ui.selectable_label(self.source.is_none(), all).clicked() {
-                    self.source = None;
-                }
-                for i in 0..self.sources.len() {
-                    let count = self.families.iter().filter(|f| f.faces.iter().any(|x| x.source == i)).count();
-                    let label = format!("{}  {}", self.sources[i].0, count);
-                    if ui.selectable_label(self.source == Some(i), label).clicked() {
-                        self.source = Some(i);
-                    }
-                }
-                ui.add_space(12.0);
-                if ui.add(egui::Button::new(RichText::new("+ Add folder").color(Color32::WHITE)).fill(ACTION)).clicked()
-                    && let Some(dir) = rfd::FileDialog::new().pick_folder()
-                {
-                    self.add_folder(dir);
-                }
+                *ui.visuals_mut() = theme::chrome_visuals();
+                // The three groups scroll; the footer below them (counts and the support card) stays in view.
+                let footer = 104.0;
+                egui::ScrollArea::vertical()
+                    .id_salt("sidebar_groups")
+                    .auto_shrink([false, false])
+                    .max_height((ui.available_height() - footer).max(60.0))
+                    .show(ui, |ui| {
+                        ui.spacing_mut().item_spacing.y = 2.0;
+                        widgets::section_label(ui, "Library");
+                        ui.add_space(theme::space::S);
+                        let all = self.source.is_none() && self.collection.is_none();
+                        if source_row(ui, "All fonts", self.families.len(), all).clicked() {
+                            self.set_source(None);
+                            self.set_collection(None);
+                        }
+                        self.collection_row(ui, Collection::TurnedOn, counts);
+                        ui.add_space(theme::space::M);
+                        widgets::section_label(ui, "Collections");
+                        ui.add_space(theme::space::S);
+                        for c in &Collection::ALL[1..] {
+                            self.collection_row(ui, *c, counts);
+                        }
+                        ui.add_space(theme::space::M);
+                        widgets::section_label(ui, "Folders");
+                        ui.add_space(theme::space::S);
+                        let mut remove = None;
+                        for i in 0..self.sources.len() {
+                            let count = self.families.iter().filter(|f| f.faces.iter().any(|x| x.source == i)).count();
+                            // Added folders can be removed once the scan is over (the scan indexes folders by position).
+                            let removable = i >= self.fixed_sources && self.scan_done;
+                            let (row, removed) = sidebar_row(ui, &self.sources[i].0, count, self.source == Some(i), removable);
+                            if removed {
+                                remove = Some(i);
+                            } else if row.clicked() {
+                                self.set_source(Some(i));
+                            }
+                        }
+                        if let Some(i) = remove {
+                            self.remove_folder(i);
+                        }
+                        ui.add_space(theme::space::M);
+                        if widgets::primary_button(ui, "Add folder").clicked()
+                            && let Some(dir) = rfd::FileDialog::new().pick_folder()
+                        {
+                            self.add_folder(dir);
+                        }
+                    });
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                     // First in a bottom-up layout = lowest on screen.
                     self.support_card(ui);
-                    ui.add_space(8.0);
-                    let status = if self.scan_done {
-                        format!("{} styles", self.faces.len())
-                    } else {
-                        format!("Scanning… {} styles", self.faces.len())
-                    };
-                    ui.label(RichText::new(status).size(11.0).color(Color32::GRAY));
+                    ui.add_space(theme::space::S);
+                    let status = format!("{} families · {} styles", self.families.len(), self.faces.len());
+                    let status = if self.scan_done { status } else { format!("Scanning… {status}") };
+                    ui.label(RichText::new(status).font(FontId::new(theme::size::META, theme::mono())).color(color::CHROME_TEXT_MUTED));
                 });
             });
+    }
+
+    /// Above the list or grid: how many families are shown and on, and buttons that turn all
+    /// of the shown ones on or off. Big runs ask once first.
+    fn bulk_bar(&mut self, ui: &mut egui::Ui, shown: &[usize]) {
+        self.drop_stale_bulk(shown);
+        let [to_on, to_off, locked] = self.bulk_counts(shown);
+        let on_now = shown.len() - to_on - locked;
+        let (key, store) = (activate::key(), self.store.clone());
+        ui.horizontal(|ui| {
+            let mut text = format!("{} families · {} on", shown.len(), on_now);
+            if locked > 0 {
+                text.push_str(&format!(" · {locked} locked"));
+            }
+            ui.label(RichText::new(text).size(theme::size::SECONDARY).color(color::INK_DIM));
+            ui.add_space(theme::space::S);
+            if let Some((on, _)) = self.pending_bulk.clone() {
+                let n = if on { to_on } else { to_off };
+                let undo = if on { "Turn off" } else { "Turn on" };
+                ui.label(RichText::new(format!("{} {n} fonts? {undo} restores them.", if on { "Turn on" } else { "Turn off" })).size(theme::size::SECONDARY).color(color::INK));
+                if widgets::primary_button(ui, if on { "Turn on" } else { "Turn off" }).clicked() {
+                    self.bulk_in(shown, on, &key, &store);
+                }
+                if widgets::paper_button(ui, "Cancel").clicked() {
+                    self.pending_bulk = None;
+                }
+                return;
+            }
+            for (on, n) in [(true, to_on), (false, to_off)] {
+                if n == 0 {
+                    continue;
+                }
+                let label = format!("{} {n}", if on { "Turn on" } else { "Turn off" });
+                let clicked = if on { widgets::primary_button(ui, &label) } else { widgets::paper_button(ui, &label) }.clicked();
+                if clicked && n > BULK_CONFIRM {
+                    self.pending_bulk = Some((on, shown.to_vec()));
+                } else if clicked {
+                    self.bulk_in(shown, on, &key, &store);
+                }
+            }
+            if let Some(note) = &self.bulk_note {
+                let label = egui::Label::new(RichText::new(note).size(theme::size::SECONDARY).color(color::INK_MUTED)).sense(egui::Sense::click());
+                if ui.add(label).on_hover_text("Click to dismiss").clicked() {
+                    self.bulk_note = None;
+                }
+            }
+        });
+        if let Some(n) = self.notice.clone() {
+            let label = egui::Label::new(RichText::new(n).size(theme::size::SECONDARY).color(color::DANGER)).sense(egui::Sense::click());
+            if ui.add(label).on_hover_text("Click to dismiss").clicked() {
+                self.notice = None;
+            }
+        }
+        ui.add_space(theme::space::S);
+    }
+
+    /// One Library or Collections row; clicking the chosen one clears the filter.
+    fn collection_row(&mut self, ui: &mut egui::Ui, c: Collection, counts: [usize; 5]) {
+        let chosen = self.collection == Some(c);
+        let response = source_row(ui, c.label(), counts[c.index()], chosen).on_hover_text(c.hint());
+        if response.clicked() {
+            self.set_collection(if chosen { None } else { Some(c) });
+        }
+    }
+
+    /// While the preview text filters the list: says so, and offers to show everything again.
+    fn filter_notice(&mut self, ui: &mut egui::Ui, need: u16) {
+        ui.horizontal(|ui| {
+            let names = crate::samples::script_names(need);
+            ui.label(RichText::new(format!("Showing fonts that support {names}")).size(theme::size::SECONDARY).color(color::INK_DIM));
+            if widgets::link(ui, "Show all fonts").clicked() {
+                self.text.clear();
+            }
+        });
+        ui.add_space(theme::space::S);
+    }
+
+    /// Why the list is empty and what to do about it; the first rule that fits wins.
+    fn empty_text(&self) -> String {
+        if !self.scan_done && self.families.is_empty() {
+            return "Scanning your fonts…".into();
+        }
+        let need = self.text_need();
+        if need != 0 {
+            return format!("No fonts support {}. Show all fonts to see everything.", crate::samples::script_names(need));
+        }
+        if !self.search.is_empty() {
+            return format!("No fonts match \u{201C}{}\u{201D}. Clear the search or pick another source.", self.search);
+        }
+        match self.collection {
+            Some(Collection::TurnedOn) => "Nothing is turned on yet. Turn a font on with its switch.".into(),
+            Some(Collection::Variable) => "No variable fonts found. Fonts with adjustable weight or width appear here.".into(),
+            Some(Collection::ManyWeights) => "No families with more than 3 weights here. Try All fonts.".into(),
+            Some(c) => format!("No {} fonts here. Try All fonts.", c.label()),
+            None => "No fonts match.".into(),
+        }
     }
 
     /// Small card at the bottom of the side panel: picture, thanks line and the coffee link.
     fn support_card(&mut self, ui: &mut egui::Ui) {
-        // Fixed height (56px picture + margins): the sidebar's bottom-up layout would otherwise stretch the frame.
-        let size = egui::vec2(ui.available_width(), 72.0);
+        // Fixed height (48px picture + margins): the sidebar's bottom-up layout would otherwise stretch the frame.
+        let size = egui::vec2(ui.available_width(), 64.0);
         ui.allocate_ui_with_layout(size, egui::Layout::top_down(egui::Align::LEFT), |ui| {
-            egui::Frame::NONE.fill(Color32::from_rgb(0x22, 0x22, 0x22)).corner_radius(8.0).inner_margin(8.0).show(ui, |ui| {
-                ui.horizontal(|ui| {
-                if let Some(art) = &self.art {
-                    ui.add(egui::Image::new((art.id(), egui::vec2(56.0, 56.0))).corner_radius(8.0));
-                }
-                ui.vertical(|ui| {
-                    ui.label(RichText::new("Support FontCraft").size(12.0).color(TEXT_LIGHT));
-                    let coffee = egui::Button::new(RichText::new("Buy me a coffee").size(12.0).color(Color32::WHITE)).fill(ACTION);
-                    if ui.add(coffee).clicked() {
-                        self.notice = crate::support::open_support().err();
-                    }
+            egui::Frame::NONE
+                .fill(color::CHROME_RAISED)
+                .corner_radius(theme::radius::CARD)
+                .inner_margin(8.0)
+                .show(ui, |ui| {
+                    ui.horizontal_centered(|ui| {
+                        // The picture goes first when the sidebar is narrow so the button keeps its full label.
+                        if ui.available_width() > 160.0
+                            && let Some(art) = &self.art
+                        {
+                            ui.add(egui::Image::new((art.id(), egui::vec2(48.0, 48.0))).corner_radius(4.0));
+                        }
+                        ui.add_space(theme::space::XS);
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new("Support FontCraft").size(theme::size::SECONDARY).color(color::CHROME_TEXT));
+                            ui.add_space(2.0);
+                            if widgets::ghost_button(ui, "Buy me a coffee").clicked() {
+                                self.notice = crate::support::open_support().err();
+                            }
+                        });
+                    });
                 });
-                });
-            });
         });
     }
 
     fn list(&mut self, ui: &mut egui::Ui) {
+        if self.view == grid::View::Grid {
+            return self.grid(ui);
+        }
         let visible = self.visible();
         let row_h = self.size * 1.35 + 34.0;
+        let need = self.text_need();
         egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.fill(MAIN_BG).inner_margin(egui::Margin::symmetric(20, 8)))
+            .frame(egui::Frame::NONE.fill(color::PAPER).inner_margin(egui::Margin::symmetric(theme::space::XL as i8, 8)))
             .show(ui, |ui| {
+                if need != 0 {
+                    self.filter_notice(ui, need);
+                }
                 if visible.is_empty() {
                     ui.centered_and_justified(|ui| {
-                        ui.label(if self.scan_done { "No fonts match." } else { "Looking for fonts…" });
+                        let text = self.empty_text();
+                        ui.label(RichText::new(text).size(theme::size::BODY).color(color::INK_MUTED));
                     });
                     return;
                 }
+                self.bulk_bar(ui, &visible);
                 egui::ScrollArea::vertical().auto_shrink(false).show_rows(ui, row_h, visible.len(), |ui, range| {
                     for &i in &visible[range] {
                         self.row(ui, i, row_h);
@@ -513,30 +1001,152 @@ impl FontApp {
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), row_h), egui::Sense::click());
         let painter = ui.painter_at(rect);
         if selected || resp.hovered() {
-            painter.rect_filled(rect, 6.0, if selected { Color32::from_rgb(0xEC, 0xE6, 0xFD) } else { Color32::from_gray(0xF0) });
+            let inner = rect.shrink2(egui::vec2(0.0, 2.0));
+            if selected {
+                painter.rect(inner, theme::radius::CONTROL, color::SELECTED, egui::Stroke::new(1.0, color::CANVAS_LINE), egui::StrokeKind::Inside);
+            } else {
+                painter.rect_filled(inner, theme::radius::CONTROL, color::CANVAS_HOVER);
+            }
         }
-        let drawn = family.map(|f| pick_font(ui.ctx(), f, &sample, self.size, TEXT_MAIN));
+        let drawn = family.map(|f| pick_font(ui.ctx(), f, &sample, self.size, color::INK));
         let lacks = drawn.as_ref().is_some_and(|d| !d.has_all);
         let mut meta = format!("{name}   ·   {styles} style{}", if styles == 1 { "" } else { "s" });
         if lacks {
             meta.push_str("   ·   no glyphs for this text");
         }
-        painter.text(rect.left_top() + egui::vec2(8.0, 8.0), egui::Align2::LEFT_TOP, meta.clone(), FontId::proportional(12.0), Color32::from_gray(0x80));
-        if on {
-            let pill = egui::Rect::from_min_size(rect.right_top() + egui::vec2(-44.0, 6.0), egui::vec2(34.0, 16.0));
-            painter.rect_filled(pill, 8.0, ACTION);
-            painter.text(pill.center(), egui::Align2::CENTER_CENTER, "ON", FontId::proportional(10.0), Color32::WHITE);
-        }
+        painter.text(rect.left_top() + egui::vec2(8.0, 8.0), egui::Align2::LEFT_TOP, meta, FontId::proportional(theme::size::SECONDARY), color::INK_DIM);
+        let toggled = Self::quick_switch(
+            ui,
+            resp.id.with("switch"),
+            rect.right_top() + egui::vec2(-theme::space::M, 17.0),
+            on,
+            Self::lock(&self.families[i]),
+        );
         let pos = rect.left_top() + egui::vec2(8.0, 28.0);
         match drawn {
             Some(d) => {
                 painter.text(pos, egui::Align2::LEFT_TOP, sample, d.font, d.color);
             }
             None => {
-                painter.text(pos, egui::Align2::LEFT_TOP, sample, FontId::proportional(self.size), Color32::from_gray(0xD0));
+                painter.text(pos, egui::Align2::LEFT_TOP, sample, FontId::proportional(self.size), color::CANVAS_LINE);
             }
         }
-        if resp.clicked() {
+        if toggled {
+            self.toggle(&name);
+        } else if resp.clicked() {
+            self.selected = if selected { None } else { Some(name) };
+            self.selected_face = 0;
+        }
+    }
+
+    /// The switch for a family, or "Locked" when the system owns its files. True when the switch was clicked.
+    fn quick_switch(ui: &mut egui::Ui, id: egui::Id, right_center: egui::Pos2, on: bool, lock: Option<&'static str>) -> bool {
+        match lock {
+            Some(reason) => {
+                widgets::locked(ui, id, right_center, reason);
+                false
+            }
+            None => widgets::switch(ui, id, right_center, on).on_hover_text(if on { "Turn off" } else { "Turn on" }).clicked(),
+        }
+    }
+
+    /// The same families as square cards, virtualized by row: only the visible cards are drawn
+    /// and only their fonts load.
+    fn grid(&mut self, ui: &mut egui::Ui) {
+        let visible = self.visible();
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE.fill(color::PAPER).inner_margin(egui::Margin::symmetric(theme::space::XL as i8, 8)))
+            .show(ui, |ui| {
+                if visible.is_empty() {
+                    ui.centered_and_justified(|ui| {
+                        let text = self.empty_text();
+                        ui.label(RichText::new(text).size(theme::size::BODY).color(color::INK_MUTED));
+                    });
+                    return;
+                }
+                self.bulk_bar(ui, &visible);
+                let columns = grid::columns(ui.available_width());
+                let rows = grid::row_count(visible.len(), columns);
+                egui::ScrollArea::vertical().auto_shrink(false).show_rows(ui, grid::row_height(), rows, |ui, range| {
+                    let drawn = grid::visible_range(range.start, range.end, columns, visible.len());
+                    // One allocation per row; the cards sit left to right inside it.
+                    let mut row: Option<(usize, egui::Rect)> = None;
+                    for i in drawn {
+                        let r = i / columns;
+                        let row_rect = match row {
+                            Some((same, rect)) if same == r => rect,
+                            _ => {
+                                let (rect, _) =
+                                    ui.allocate_exact_size(egui::vec2(ui.available_width(), grid::row_height()), egui::Sense::hover());
+                                row = Some((r, rect));
+                                rect
+                            }
+                        };
+                        // Leftover width is split evenly on both sides so the grid stays centred as the window changes.
+                        let used = columns as f32 * grid::CARD_SIZE + (columns - 1) as f32 * theme::space::L;
+                        let margin = ((row_rect.width() - used) / 2.0).max(0.0);
+                        let x = row_rect.left() + margin + (i % columns) as f32 * (grid::CARD_SIZE + theme::space::L);
+                        let card = egui::Rect::from_min_size(egui::pos2(x, row_rect.top()), egui::vec2(grid::CARD_SIZE, grid::CARD_SIZE));
+                        self.card(ui, visible[i], card);
+                    }
+                });
+            });
+    }
+
+    /// One card: the script glyph in the family's own face, its style count, the On dot and the
+    /// name underneath. A click opens the same details as a list row.
+    fn card(&mut self, ui: &mut egui::Ui, i: usize, card: egui::Rect) {
+        let fam = &self.families[i];
+        let face = fam.main_face().clone();
+        let selected = self.selected.as_deref() == Some(fam.name.as_str());
+        let (name, styles) = (fam.name.clone(), fam.faces.len());
+        let on = all_active(&self.active, &self.disabled, fam);
+        let family = self.loader.family(&face);
+        let glyph = crate::samples::card_glyph(face.script);
+        let name_rect = egui::Rect::from_min_size(
+            egui::pos2(card.left(), card.bottom() + theme::space::S),
+            egui::vec2(grid::CARD_SIZE, grid::NAME_H),
+        );
+        let resp = ui.interact(card.union(name_rect), ui.scope_id().with(("grid card", i)), egui::Sense::click());
+        let painter = ui.painter_at(card.union(name_rect));
+        let fill = if selected {
+            color::SELECTED
+        } else if resp.hovered() {
+            color::CANVAS_HOVER
+        } else {
+            color::CARD
+        };
+        painter.rect(card, theme::radius::CARD, fill, egui::Stroke::new(1.0, color::CANVAS_LINE), egui::StrokeKind::Inside);
+        const GLYPH_SIZE: f32 = 44.0;
+        match family.map(|f| pick_font(ui.ctx(), f, glyph, GLYPH_SIZE, color::INK)) {
+            Some(d) => {
+                painter.text(card.center(), egui::Align2::CENTER_CENTER, glyph, d.font, d.color);
+            }
+            None => {
+                painter.text(card.center(), egui::Align2::CENTER_CENTER, glyph, FontId::proportional(GLYPH_SIZE), color::CANVAS_LINE);
+            }
+        }
+        painter.text(
+            egui::pos2(card.left() + theme::space::S, card.bottom() - theme::space::S),
+            egui::Align2::LEFT_BOTTOM,
+            format!("{styles} style{}", if styles == 1 { "" } else { "s" }),
+            FontId::proportional(theme::size::META),
+            color::INK_MUTED,
+        );
+        let galley = name_galley(ui.ctx(), &name);
+        painter.galley(name_rect.left_top(), galley, color::INK_DIM);
+        // Off switches only show on hover or selection, so a page of cards stays calm.
+        let toggled = (on || selected || ui.rect_contains_pointer(card))
+            && Self::quick_switch(
+                ui,
+                resp.id.with("switch"),
+                card.right_top() + egui::vec2(-theme::space::S, theme::space::S + 9.0),
+                on,
+                Self::lock(&self.families[i]),
+            );
+        if toggled {
+            self.toggle(&name);
+        } else if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
             self.selected = if selected { None } else { Some(name) };
             self.selected_face = 0;
         }
@@ -561,48 +1171,55 @@ impl FontApp {
         let mut clicked = false;
         egui::Panel::right("details")
             .default_size(420.0)
+            .max_size(ui.available_width() * 0.6)
             .resizable(true)
-            .frame(egui::Frame::NONE.fill(Color32::WHITE).inner_margin(egui::Margin::same(16)))
+            .frame(egui::Frame::NONE.fill(color::CARD).inner_margin(egui::Margin::same(16)))
             .show(ui, |ui| {
-                ui.visuals_mut().override_text_color = Some(TEXT_MAIN);
+                ui.visuals_mut().override_text_color = Some(color::INK);
+                ui.visuals_mut().selection.bg_fill = color::SELECTED;
+                ui.visuals_mut().selection.stroke.color = color::INK;
                 ui.horizontal(|ui| {
-                    ui.heading(&name);
+                    ui.label(RichText::new(&name).size(theme::size::DETAIL).color(color::INK));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("×").on_hover_text("Close").clicked() {
+                        if widgets::paper_button(ui, "×").on_hover_text("Close").clicked() {
                             self.selected = None;
                         }
                     });
                 });
-                ui.label(RichText::new(faces[0].path.display().to_string()).size(11.0).color(Color32::GRAY));
+                ui.label(RichText::new(faces[0].path.display().to_string()).font(FontId::new(theme::size::META, theme::mono())).color(color::INK_MUTED));
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    let (text, fill, color) = match (can, on) {
-                        (false, _) => {
-                            (if cfg!(windows) { "System font: needs administrator" } else { "Locked" }, Color32::from_gray(0xEE), TEXT_MAIN)
-                        }
-                        (true, true) => ("Turn off", Color32::from_gray(0xEE), TEXT_MAIN),
-                        (true, false) => ("Turn on", ACTION, Color32::WHITE),
+                    let text = match (can, on) {
+                        (false, _) => if cfg!(windows) { "System font: needs administrator" } else { "Locked" },
+                        (true, true) => "Turn off",
+                        (true, false) => "Turn on",
                     };
-                    let resp = ui.add_enabled(can, egui::Button::new(RichText::new(text).color(color)).fill(fill));
-                    clicked = resp.on_disabled_hover_text(lock.unwrap_or_default()).clicked();
+                    // A locked font gets a plain label (a faded disabled button would fall under 4.5:1).
+                    if can {
+                        let resp = if on { widgets::paper_button(ui, text) } else { widgets::primary_button(ui, text) };
+                        clicked = resp.clicked();
+                    } else {
+                        ui.label(RichText::new(text).size(theme::size::SECONDARY).color(color::INK_DIM))
+                            .on_hover_text(lock.unwrap_or_default());
+                    }
                     if on && can {
-                        ui.label(RichText::new("On for all apps").size(12.0).color(ACTION));
+                        ui.label(RichText::new("On for all apps").size(theme::size::SECONDARY).color(color::COBALT));
                     } else if saved_off {
-                        ui.label(RichText::new("Off: its settings are saved").size(12.0).color(Color32::GRAY));
+                        ui.label(RichText::new("Off. Turn on restores it as it was.").size(theme::size::SECONDARY).color(color::INK_MUTED));
                     }
                 });
                 if by_fontbase && can {
-                    ui.label(RichText::new("FontBase قد يعرض هذا الخط كمفعّل حتى تفتحه فيه").size(11.0).color(Color32::GRAY));
+                    ui.label(RichText::new("FontBase may still show this font as on until you open it there.").size(11.0).color(color::INK_MUTED));
                 }
                 if !shares.is_empty() && can {
                     ui.label(
-                        RichText::new(format!("This file also holds: {} (they change together)", shares.join(", ")))
+                        RichText::new(format!("Also in this file: {}. They turn on and off together.", shares.join(", ")))
                             .size(11.0)
-                            .color(Color32::GRAY),
+                            .color(color::INK_MUTED),
                     );
                 }
                 if let Some(n) = &self.notice {
-                    let notice = egui::Label::new(RichText::new(n).size(12.0).color(Color32::from_rgb(0xD0, 0x00, 0x48)))
+                    let notice = egui::Label::new(RichText::new(n).size(12.0).color(color::DANGER))
                         .sense(egui::Sense::click());
                     if ui.add(notice).on_hover_text("Click to dismiss").clicked() {
                         self.notice = None;
@@ -613,19 +1230,19 @@ impl FontApp {
                     for (k, face) in faces.iter().enumerate() {
                         let fam = self.loader.family(face);
                         let label = RichText::new(&face.style).size(22.0);
-                        let label = match fam { Some(f) => label.family(f), None => label.color(Color32::LIGHT_GRAY) };
+                        let label = match fam { Some(f) => label.family(f), None => label.color(color::CANVAS_LINE) };
                         if ui.selectable_label(self.selected_face == k, label).clicked() {
                             self.selected_face = k;
                         }
                     }
                     ui.add_space(16.0);
-                    ui.label(RichText::new("WATERFALL").size(11.0).color(Color32::GRAY));
+                    widgets::paper_section_label(ui, "Waterfall");
                     let face = &faces[self.selected_face.min(faces.len() - 1)];
                     let sample = self.sample(face);
                     if let Some(f) = self.loader.family(face) {
                         for size in WATERFALL {
-                            let d = pick_font(ui.ctx(), f.clone(), &sample, size, TEXT_MAIN);
-                            ui.label(RichText::new(format!("{size} px")).size(11.0).color(Color32::GRAY));
+                            let d = pick_font(ui.ctx(), f.clone(), &sample, size, color::INK);
+                            ui.label(RichText::new(format!("{size} px")).font(FontId::new(theme::size::META, theme::mono())).color(color::INK_MUTED));
                             ui.add(egui::Label::new(RichText::new(&sample).font(d.font).color(d.color)).wrap());
                         }
                     }
@@ -642,7 +1259,7 @@ mod tests {
     use super::*;
 
     fn face(family: &str, style: &str, weight: u16, italic: bool) -> Face {
-        Face { path: PathBuf::from(format!("{family}{style}.ttf")), index: 0, family: family.into(), style: style.into(), weight, italic, script: 0, source: 0 }
+        Face { path: PathBuf::from(format!("{family}{style}.ttf")), index: 0, family: family.into(), style: style.into(), weight, italic, script: 0, scripts: crate::samples::LATIN, variable: false, source: 0 }
     }
 
     fn sourced(path: &std::path::Path, family: &str, source: usize) -> Face {
@@ -664,6 +1281,9 @@ mod tests {
                 size: SIZE_DEFAULT,
                 search: String::new(),
                 source: None,
+                collection: None,
+                counts: [0; 5],
+                view: grid::View::List,
                 selected: None,
                 selected_face: 0,
                 active: HashSet::new(),
@@ -671,6 +1291,10 @@ mod tests {
                 fontbase_files: HashSet::new(),
                 store: PathBuf::new(),
                 notice: None,
+                pending_bulk: None,
+                bulk_note: None,
+                bulk_cache: None,
+                whats_new: None,
                 update: None,
                 updates: None,
                 update_error: None,
@@ -683,11 +1307,24 @@ mod tests {
 
     #[test]
     fn family_files_are_distinct_and_sorted() {
-        let fam = Family {
-            name: "X".into(),
-            faces: vec![sourced("b.ttc".as_ref(), "X", 3), sourced("a.ttf".as_ref(), "X", 3), sourced("b.ttc".as_ref(), "X", 3)],
-        };
+        let fam = Family::new(
+            "X".into(),
+            vec![sourced("b.ttc".as_ref(), "X", 3), sourced("a.ttf".as_ref(), "X", 3), sourced("b.ttc".as_ref(), "X", 3)],
+        );
         assert_eq!(fam.files(), vec![PathBuf::from("a.ttf"), PathBuf::from("b.ttc")]);
+    }
+
+    #[test]
+    fn family_aggregates_scripts_variable_and_weights() {
+        let mut a = face("Mixed", "Regular", 400, false);
+        a.scripts = crate::samples::LATIN | crate::samples::ARABIC;
+        let mut b = face("Mixed", "Bold", 700, false);
+        b.variable = true;
+        let c = face("Mixed", "Italic", 400, true);
+        let fam = &group(&[a, b, c])[0];
+        assert_eq!(fam.scripts, crate::samples::LATIN | crate::samples::ARABIC);
+        assert!(fam.variable);
+        assert_eq!(fam.weight_count, 2); // 400 and 700; the italic repeats 400
     }
 
     #[cfg(windows)]
@@ -729,7 +1366,7 @@ mod tests {
     fn user_font_is_on_until_rejected() {
         let user = Path::new("/home/u/.local/share/fonts");
         let links = user.join("FontCraft");
-        let fam = |p: &str| Family { name: "X".into(), faces: vec![sourced(p.as_ref(), "X", 1)] };
+        let fam = |p: &str| Family::new("X".into(), vec![sourced(p.as_ref(), "X", 1)]);
         let (none, off) = (HashSet::new(), HashSet::from([PathBuf::from("/home/u/.local/share/fonts/a.ttf")]));
         let own = fam("/home/u/.local/share/fonts/a.ttf");
         assert!(all_active_in(&none, &none, user, &links, &own));
@@ -765,7 +1402,7 @@ mod tests {
 
     #[test]
     fn is_active_requires_all_files_active() {
-        let fam = Family { name: "X".into(), faces: vec![sourced("a.ttf".as_ref(), "X", 3), sourced("b.ttf".as_ref(), "X", 3)] };
+        let fam = Family::new("X".into(), vec![sourced("a.ttf".as_ref(), "X", 3), sourced("b.ttf".as_ref(), "X", 3)]);
         let mut active = HashSet::from([PathBuf::from("a.ttf")]);
         assert!(!all_active(&active, &HashSet::new(), &fam));
         active.insert(PathBuf::from("b.ttf"));
@@ -819,11 +1456,201 @@ mod tests {
     }
 
     #[test]
+    fn got_it_hides_the_banner() {
+        let mut app = FontApp::for_test(3, vec![]);
+        app.whats_new = Some(vec!["x".into()]);
+        app.dismiss_whats_new();
+        assert_eq!(app.whats_new, None);
+    }
+
+    #[test]
+    fn bulk_plan_skips_in_state_and_dedups_shared_files() {
+        let (a, b, c) = (PathBuf::from("a.ttf"), PathBuf::from("b.ttf"), PathBuf::from("shared.ttf"));
+        let mut app = FontApp::for_test(3, vec![sourced(&a, "A", 3), sourced(&b, "B", 3), sourced(&c, "C", 3), sourced(&c, "D", 3)]);
+        app.active.insert(crate::activate::norm(&a)); // A is already on
+        let all: Vec<usize> = (0..app.families.len()).collect();
+        let (files, changed, locked) = app.bulk_plan(&all, true);
+        assert_eq!((changed, locked), (3, 0)); // B, C, D
+        assert_eq!(files, vec![b.clone(), c.clone()]); // the shared file once
+        let (files, changed, _) = app.bulk_plan(&all, false);
+        assert_eq!((changed, files), (1, vec![a])); // only A can turn off
+        assert_eq!(app.bulk_counts(&all), [3, 1, 0]);
+        app.refresh_counts();
+        assert!(app.bulk_cache.is_none()); // state changes drop the cache
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn bulk_plan_counts_locked_families_and_leaves_them_out() {
+        let sys = env_path("WINDIR", r"Fonts\arial.ttf");
+        let app = FontApp::for_test(3, vec![sourced(&sys, "Sys", 0), sourced("u.ttf".as_ref(), "User", 3)]);
+        let (files, changed, locked) = app.bulk_plan(&[0, 1], true);
+        assert_eq!((changed, locked), (1, 1));
+        assert_eq!(files, vec![PathBuf::from("u.ttf")]);
+    }
+
+    #[test]
+    fn pending_bulk_is_dropped_when_the_shown_families_change() {
+        let mut app = FontApp::for_test(3, vec![sourced("a.ttf".as_ref(), "A", 3), sourced("b.ttf".as_ref(), "B", 3)]);
+        app.pending_bulk = Some((true, vec![0, 1]));
+        app.drop_stale_bulk(&[0, 1]);
+        assert!(app.pending_bulk.is_some());
+        app.drop_stale_bulk(&[0]);
+        assert!(app.pending_bulk.is_none());
+    }
+
+    #[test]
     fn groups_case_insensitively_and_picks_regular() {
         let fams = group(&[face("Inter", "Bold", 700, false), face("inter", "Regular", 400, false), face("Inter", "Italic", 400, true), face("Abc", "Regular", 400, false)]);
         assert_eq!(fams.len(), 2);
         assert_eq!(fams[0].name, "Abc");
         assert_eq!(fams[1].faces.len(), 3);
         assert_eq!(fams[1].main_face().style, "Regular");
+    }
+
+    #[test]
+    fn grid_drawn_for_visible_rows_only() {
+        let faces: Vec<Face> = (0..50).map(|i| face(&format!("Fam{i:02}"), "Regular", 400, false)).collect();
+        let app = FontApp::for_test(3, faces);
+        let visible = app.visible();
+        assert_eq!(visible.len(), 50);
+        let cols = grid::columns(grid::CARD_SIZE * 4.0 + theme::space::L * 3.0);
+        assert_eq!(cols, 4);
+        // What `show_rows` reports for three rows starting at row 3: exactly those families.
+        let drawn = grid::visible_range(3, 6, cols, visible.len());
+        assert_eq!(drawn, 12..24);
+        assert_eq!(&visible[drawn], &visible[12..24]);
+        // The last row stops at the last family, and nothing ever reaches past it.
+        assert_eq!(grid::visible_range(11, 14, cols, visible.len()), 44..50);
+        assert_eq!(grid::visible_range(0, 999, cols, visible.len()), 0..50);
+        assert_eq!(grid::visible_range(0, 2, cols, 0), 0..0);
+    }
+
+    fn app_with_scripts() -> FontApp {
+        use crate::samples::{ARABIC, LATIN};
+        let mut ara = face("Ara", "Regular", 400, false);
+        ara.scripts = ARABIC;
+        let mut lat = face("Lat", "Regular", 400, false);
+        lat.scripts = LATIN;
+        let mut mix = face("Mix", "Regular", 400, false);
+        mix.scripts = LATIN | ARABIC;
+        FontApp::for_test(3, vec![ara, lat, mix])
+    }
+
+    fn names(app: &FontApp) -> Vec<String> {
+        app.visible().into_iter().map(|i| app.families[i].name.clone()).collect()
+    }
+
+    #[test]
+    fn visible_obeys_collection_text_and_search() {
+        let mut app = app_with_scripts();
+        app.refresh_counts();
+        assert_eq!(names(&app), ["Ara", "Lat", "Mix"]);
+        assert_eq!(app.collection_counts()[Collection::Arabic.index()], 2);
+        assert_eq!(app.collection_counts()[Collection::English.index()], 2);
+        app.text = "عبد".into();
+        assert_eq!(names(&app), ["Ara", "Mix"]);
+        app.text = "Hello".into();
+        assert_eq!(names(&app), ["Lat", "Mix"]);
+        app.text = "Hello عبد".into();
+        assert_eq!(names(&app), ["Mix"]);
+        app.text = "123 !?".into();
+        assert_eq!(names(&app).len(), 3);
+        app.text.clear();
+        app.set_collection(Some(Collection::Arabic));
+        assert_eq!(names(&app), ["Ara", "Mix"]);
+        app.search = "mi".into();
+        assert_eq!(names(&app), ["Mix"]);
+        app.search.clear();
+        app.set_collection(None);
+        app.text = "عبد".into();
+        app.set_view(grid::View::Grid);
+        assert_eq!(names(&app).len(), 3); // the grid ignores the preview text
+    }
+
+    #[test]
+    fn collection_and_source_exclude_each_other() {
+        let mut app = app_with_scripts();
+        app.set_collection(Some(Collection::Arabic));
+        app.set_source(Some(1));
+        assert_eq!((app.collection, app.source), (None, Some(1)));
+        app.set_collection(Some(Collection::English));
+        assert_eq!((app.collection, app.source), (Some(Collection::English), None));
+    }
+
+    #[test]
+    fn turned_on_follows_the_active_set() {
+        let mut app = app_with_scripts();
+        app.refresh_counts();
+        assert_eq!(app.collection_counts()[Collection::TurnedOn.index()], 0);
+        app.set_collection(Some(Collection::TurnedOn));
+        assert!(names(&app).is_empty());
+        let path = app.families[1].faces[0].path.clone();
+        app.active.insert(activate::norm(&path));
+        app.refresh_counts();
+        assert_eq!(app.collection_counts()[Collection::TurnedOn.index()], 1);
+        assert_eq!(names(&app), ["Lat"]);
+        app.active.clear();
+        app.refresh_counts();
+        assert!(names(&app).is_empty());
+    }
+
+    #[test]
+    fn filters_do_not_clear_the_selection() {
+        let mut app = app_with_scripts();
+        app.selected = Some("Lat".into());
+        app.text = "عبد".into();
+        assert!(!names(&app).contains(&"Lat".to_string()));
+        assert_eq!(app.selected.as_deref(), Some("Lat"));
+    }
+
+    #[test]
+    fn dropping_a_folder_shifts_the_rest_and_repairs_state() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-drop-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let kept_file = dir.join("keep.ttf");
+        std::fs::write(&kept_file, b"x").unwrap();
+        let mut app = FontApp::for_test(
+            3,
+            vec![
+                sourced("a.ttf".as_ref(), "OnlyA", 3),
+                sourced(&kept_file, "OnlyB", 4),
+                sourced("shared-a.ttf".as_ref(), "Shared", 3),
+                sourced("shared-b.ttf".as_ref(), "Shared", 4),
+            ],
+        );
+        app.sources = ["System", "User", "FontBase", "A", "B"].map(|n| (n.to_string(), PathBuf::from(n))).to_vec();
+        app.source = Some(4);
+        app.selected = Some("OnlyA".into());
+        assert!(app.drop_source(3));
+        assert_eq!(app.sources.len(), 4);
+        assert_eq!(app.sources[3].0, "B");
+        assert_eq!(app.source, Some(3)); // B moved from 4 to 3 and stays chosen
+        let names: Vec<&str> = app.families.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["OnlyB", "Shared"]);
+        assert!(app.faces.iter().all(|f| f.source == 3)); // everything left lives in the shifted folder
+        assert_eq!(app.selected, None); // its only family went away
+        assert!(kept_file.is_file()); // files on disk are never touched
+        // Built-in sources and unknown indexes are refused.
+        assert!(!app.drop_source(1));
+        assert!(!app.drop_source(9));
+        assert_eq!(app.sources.len(), 4);
+        // Removing the chosen folder clears the choice; a kept selection stays.
+        app.selected = Some("Shared".into());
+        assert!(app.drop_source(3));
+        assert_eq!(app.source, None);
+        assert!(app.families.is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn set_view_keeps_selection() {
+        let mut app = FontApp::for_test(3, vec![face("Arial", "Regular", 400, false)]);
+        app.selected = Some("Arial".into());
+        app.set_view(grid::View::Grid);
+        assert_eq!(app.view, grid::View::Grid);
+        assert_eq!(app.selected.as_deref(), Some("Arial"));
+        app.set_view(grid::View::List);
+        assert_eq!(app.selected.as_deref(), Some("Arial"));
     }
 }

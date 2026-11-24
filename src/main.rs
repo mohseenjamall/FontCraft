@@ -3,14 +3,19 @@ mod activate;
 // Built on every OS so its file logic is tested on Windows too; only used on macOS and Linux.
 mod activate_unix;
 mod app;
+mod collections;
 mod disabled;
 mod fonts;
+mod grid;
 mod platform;
 mod samples;
 mod scan;
 mod store;
 mod support;
+mod theme;
 mod update;
+mod whats_new;
+mod widgets;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -73,10 +78,21 @@ fn main() -> eframe::Result {
     let select = arg("--select");
     // Starts with this preview text (used with --screenshot to check how a sample draws).
     let text = arg("--text");
+    // Starts with one collection chosen (turnedon, arabic, english, variable, weights), for screenshots.
+    let collection = arg("--collection");
+    // Starts in the grid, "grid", or the default list (used with --screenshot to check the cards).
+    let view = arg("--view");
 
+    // Shows the current version's "What's new" banner, for screenshots.
+    let whats_new = args.iter().any(|a| a == "--whats-new");
+
+    // Window size for screenshots, e.g. `--size 720x480` (checks the narrow layout).
+    let size = arg("--size")
+        .and_then(|v| v.split_once('x').and_then(|(w, h)| Some([w.parse::<f32>().ok()?, h.parse::<f32>().ok()?])))
+        .unwrap_or([1280.0, 800.0]);
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("FontCraft")
-        .with_inner_size([1280.0, 800.0])
+        .with_inner_size(size)
         .with_min_inner_size([720.0, 480.0])
         .with_icon(std::sync::Arc::new(support::app_icon()));
     if shot_path.is_some() {
@@ -99,8 +115,17 @@ fn main() -> eframe::Result {
             if !checking || std::env::var_os("FONTCRAFT_LATEST").is_some() {
                 app.check_updates(&cc.egui_ctx);
             }
+            if whats_new {
+                app.show_whats_new();
+            }
             if let Some(text) = text {
                 app.set_text(text);
+            }
+            if let Some(view) = &view {
+                app.set_view(grid::View::parse(view));
+            }
+            if let Some(c) = collection.as_deref().and_then(collections::Collection::parse) {
+                app.set_collection(Some(c));
             }
             if let Some(name) = select {
                 app.open_family(name);

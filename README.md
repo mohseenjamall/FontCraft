@@ -14,7 +14,7 @@ Version 1.2.0
   writing system: Chinese, Japanese, Arabic, Hebrew, Devanagari, Thai and others.
 - **Family details.** Click a family to see every style and a waterfall at 72, 48, 24 and 14 px.
 - **Search and filter** by name or by where the fonts are stored.
-- **Turn fonts on and off.** Pick a family and click **Turn on** or **Turn off**. It works for fonts
+- **Turn fonts on and off.** Flick the switch on any row or card, or use **Turn on N** / **Turn off N** above the list to change every family shown (a search or a collection narrows it). The details panel has the same button. It works for fonts
   from a folder you added, fonts installed for your user, and fonts FontBase turned on. Every Windows
   app (Word, Photoshop, Notepad…) sees the change right away, and it lasts after you sign out or
   restart. Turning a font off never deletes its file: FontCraft keeps its exact Windows settings and
@@ -27,7 +27,7 @@ Version 1.2.0
 - **Your folders are remembered.** Folders you add with **+ Add folder** come back the next time you
   open FontCraft.
 - **Update notice.** Each time FontCraft starts it checks, in the background, whether a newer
-  release is on GitHub. If there is one, a purple bar across the top says "Update required" with a
+  release is on GitHub. If there is one, a cobalt bar across the top says "FontCraft <version> is available." with a
   **Download update** button that opens the release page. Offline or blocked: nothing is shown and
   the app works as usual.
 - **Fast.** Fonts are scanned on several threads at once, and only the fonts on screen are loaded.
@@ -74,13 +74,17 @@ Run the tests with `cargo test`.
 
 ## Publishing an update
 
-1. Raise `version` in `Cargo.toml` (for example `1.1.0`) and build with `cargo build --release`.
+1. Raise `version` in `Cargo.toml` (for example `1.1.0`) and, in the same change, add a `## 1.1.0` section of 3 to 6
+   short bullets to `assets/whats-new.md`. People see it once, as a "New in 1.1.0" banner, the first time they start the
+   new version. `node scripts/check-whats-new.mjs` (run by CI and the release workflow) fails when the section is missing.
+   Then build with `cargo build --release`.
 2. On GitHub, create a release whose tag is that version with a `v` in front (`v1.1.0`) and attach
    the program. Pushing a `v*` tag does this for you: `.github/workflows/release.yml` builds
    `FontCraft-<version>-windows-x64.exe` (and `.zip`), `FontCraft-<version>-linux-x64` and
    `FontCraft-<version>-macos.dmg` (one universal app for Apple Silicon and Intel, built by
    `.github/workflows/macos-build.yml`), adds `SHA256SUMS.txt` and creates the release.
-3. Every copy of FontCraft that's older shows the update bar the next time it starts. Windows and
+3. Windows has no code signing, so installing from a browser shows "Unknown publisher". `winget install` avoids the warning: after the release exists, run `node scripts/winget-manifest.mjs <version> SHA256SUMS.txt`, copy `packaging/winget/<version>/` to `manifests/m/mohseenjamall/FontCraft/<version>/` in a fork of `microsoft/winget-pkgs` and open a pull request.
+4. Every copy of FontCraft that's older shows the update bar the next time it starts. Windows and
    Linux replace themselves; macOS opens the new `.dmg` (swapping the program inside a signed app
    would stop it from opening).
 
