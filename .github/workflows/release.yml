@@ -48,6 +48,21 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: Compress-Archive -Path "dist/FontCraft-$env:VERSION-windows-x64.exe" -DestinationPath "dist/FontCraft-$env:VERSION-windows-x64.zip"
+      - name: Build the installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = Get-Command iscc -ErrorAction SilentlyContinue
+          if (-not $iscc) {
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+            if (-not (Test-Path $iscc)) {
+              choco install innosetup -y --no-progress
+            }
+          }
+          & $iscc /DAppVersion=$env:VERSION /DSourceExe="$PWD\target\x86_64-pc-windows-msvc\release\fontcraft.exe" /O"$PWD\dist" packaging\windows\FontCraft.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $setup = "dist\FontCraft-$env:VERSION-windows-x64-setup.exe"
+          if (-not (Test-Path $setup)) { Write-Error "Installer not found: $setup"; exit 1 }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: FontCraft-${{ matrix.asset }}
