@@ -32,6 +32,11 @@ const releaseUrl = 'https://github.com/mohseenjamall/FontCraft/releases/tag/v1.1
           <li><code>SHA256SUMS.txt</code></li>
         </ul>
         <p class="get-note">No installer yet: run the file directly.</p>
+        <p class="get-note" data-win-note>
+          Windows may say <q>Windows protected your PC</q> or <q>Unknown publisher</q> the first time, because FontCraft is not code-signed yet.
+          Choose <strong>More info</strong>, then <strong>Run anyway</strong>. To check the file is the one published here, run
+          <code>Get-FileHash FontCraft-&hellip;-windows-x64.exe</code> in PowerShell and compare it with <code>SHA256SUMS.txt</code> in the release.
+        </p>
         <p class="get-note" data-mac-note hidden>macOS 11+, Apple Silicon and Intel: one file, <code>FontCraft-<span data-ver>1.1.0</span>-macos.dmg</code>. Open it and drag FontCraft to Applications.</p>
         <a class="text-link release-link" href={releaseUrl} data-release-link target="_blank" rel="noopener noreferrer">What changed in <span data-ver>1.1.0</span></a>
       </div>
