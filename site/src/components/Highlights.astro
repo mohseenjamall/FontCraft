@@ -2,13 +2,15 @@
 import { Image } from 'astro:assets';
 import arabicShot from '../assets/arabic.png';
 import activationShot from '../assets/activation-off.png';
+import gridShot from '../assets/grid.png';
+import collectionsShot from '../assets/collections.png';
 ---
 
 <section class="section" id="highlights">
   <div class="section-bar"><div class="container section-bar-inner"><span>02 / Highlights</span><span>What it does</span></div></div>
   <div class="container">
     <div class="section-head">
-      <h2 data-reveal>Five things it does</h2>
+      <h2 data-reveal>Seven things it does</h2>
       <p class="lede" data-reveal>
         A short list, because FontCraft is a small app with one job: show you your fonts, quickly.
         The gaps are in the comparison below.
@@ -99,9 +101,9 @@ import activationShot from '../assets/activation-off.png';
         <div class="h-body">
           <h3>Turn it on, turn it off</h3>
           <p>
-            Switch a family on or off and every Windows app sees it: Word, Photoshop, Notepad. The
-            file is never deleted. FontCraft keeps its Windows settings and puts them back. System
-            fonts stay locked.
+            Flip the switch on any row or card and every Windows app sees the font: Word, Photoshop,
+            Notepad. Turn on or off everything you are looking at with one button. The file is never
+            deleted. FontCraft keeps its Windows settings and puts them back. System fonts stay locked.
           </p>
         </div>
         <figure class="h-media">
@@ -135,6 +137,56 @@ import activationShot from '../assets/activation-off.png';
           <li><span class="scale-aa aa-24" aria-hidden="true">Aa</span><span class="meta">24 px</span></li>
           <li><span class="scale-aa aa-14" aria-hidden="true">Aa</span><span class="meta">14 px</span></li>
         </ul>
+      </li>
+
+      <li class="highlight" data-reveal>
+        <span class="h-number" aria-hidden="true">06</span>
+        <div class="h-body">
+          <h3>A list, or a grid of cards</h3>
+          <p>
+            Switch between the list and a grid of cards with one click. The list is still the default, and FontCraft remembers your choice.
+          </p>
+        </div>
+        <figure class="h-media">
+          <Image
+            src={gridShot}
+            alt="FontCraft grid view: square cards, each showing a letter in its font, with a switch to turn it on or off."
+            widths={[480, 720, 960]}
+            sizes="(max-width: 899px) calc(100vw - 90px), 480px"
+            format="webp"
+            quality={80}
+            loading="lazy"
+            decoding="async"
+          />
+          <figcaption>
+            Grid view. Each card has its own on and off switch.
+          </figcaption>
+        </figure>
+      </li>
+
+      <li class="highlight" data-reveal>
+        <span class="h-number" aria-hidden="true">07</span>
+        <div class="h-body">
+          <h3>Collections that follow your text</h3>
+          <p>
+            Arabic, English, Variable and fonts with more than 3 weights each get a collection, plus a Turned on list of every font that is on. Type Arabic in the preview and only fonts that can show it are listed.
+          </p>
+        </div>
+        <figure class="h-media">
+          <Image
+            src={collectionsShot}
+            alt="FontCraft sidebar with Library, Collections and Folders groups, the Arabic collection chosen, and on and off switches on each row."
+            widths={[480, 720, 960]}
+            sizes="(max-width: 899px) calc(100vw - 90px), 480px"
+            format="webp"
+            quality={80}
+            loading="lazy"
+            decoding="async"
+          />
+          <figcaption>
+            The Arabic collection, with a bar to turn every font shown on or off.
+          </figcaption>
+        </figure>
       </li>
     </ol>
   </div>
