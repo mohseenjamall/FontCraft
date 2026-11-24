@@ -84,7 +84,7 @@ Run the tests with `cargo test`.
    `FontCraft-<version>-macos.dmg` (one universal app for Apple Silicon and Intel, built by
    `.github/workflows/macos-build.yml`), adds `SHA256SUMS.txt` and creates the release.
 3. Windows has no code signing, so installing from a browser shows "Unknown publisher". `winget install` avoids the warning: after the release exists, run `node scripts/winget-manifest.mjs <version> SHA256SUMS.txt`, copy `packaging/winget/<version>/` to `manifests/m/mohseenjamall/FontCraft/<version>/` in a fork of `microsoft/winget-pkgs` and open a pull request.
-3. Every copy of FontCraft that's older shows the update bar the next time it starts. Windows and
+4. Every copy of FontCraft that's older shows the update bar the next time it starts. Windows and
    Linux replace themselves; macOS opens the new `.dmg` (swapping the program inside a signed app
    would stop it from opening).
 
