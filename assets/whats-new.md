@@ -1,3 +1,7 @@
+## 1.3.1
+- New Windows setup file: installs FontCraft with a Start menu shortcut, no administrator needed
+- The FontCraft icon now shows on the program file and on the taskbar
+
 ## 1.3.0
 - Switch any font on or off with one click, right on its row or card
 - Turn on or off every font you are looking at with one button
